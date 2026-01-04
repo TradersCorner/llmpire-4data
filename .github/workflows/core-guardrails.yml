@@ -1,0 +1,49 @@
+name: core-guardrails
+
+on:
+  pull_request:
+  push:
+    branches: ["**"]
+
+jobs:
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Verify v1 core did not change
+        run: |
+          set -euo pipefail
+
+          # Compare current HEAD against the canonical tag for core-only paths.
+          # If ANY of these change, fail the build.
+          TAG="v1.0.0-ephemeral"
+
+          git fetch --tags --force
+
+          # Core contract docs are allowed to evolve (PORTS + RUNTIME_CONTRACT), but code must not.
+          # Adjust the allowlist if you want to permit additional docs-only changes.
+          ALLOW_CHANGED_REGEX='^(PORTS\.md|RUNTIME_CONTRACT\.md)$'
+
+          CHANGED="$(git diff --name-only "${TAG}..HEAD" || true)"
+
+          if [ -z "$CHANGED" ]; then
+            echo "No changes vs ${TAG}."
+            exit 0
+          fi
+
+          echo "Files changed vs ${TAG}:"
+          echo "$CHANGED"
+
+          # Fail if any changed file is NOT explicitly allowed
+          while IFS= read -r f; do
+            if ! echo "$f" | grep -Eq "${ALLOW_CHANGED_REGEX}"; then
+              echo "❌ Core drift detected: $f changed vs ${TAG}"
+              exit 1
+            fi
+          done <<< "$CHANGED"
+
+          echo "✅ Only allowed files changed vs ${TAG}."
