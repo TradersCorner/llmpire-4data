@@ -1,16 +1,46 @@
-// Ephemeral, in-memory-only stream; no history, no storage.
+let currentState = null;
 
-export function publish(event) {
-  // Log only the derived delta event, not raw payload.
-  console.log("STATE UPDATE:", event);
+// SSE subscribers (in-memory only)
+const subscribers = new Set();
 
-  const delay = event.expiresAt - Date.now();
-  if (delay <= 0) {
-    console.log("STATE EXPIRED");
-    return;
+export function publish(delta) {
+  currentState = delta;
+
+  // Broadcast ONLY current state (no history)
+  broadcast("state_update", currentState);
+}
+
+// Used when the state expires
+function expireIfNeeded() {
+  if (currentState && currentState.expiresAt < Date.now()) {
+    currentState = null;
+    broadcast("state_expired", { expiredAt: Date.now() });
+  }
+}
+
+// Broadcast helper (SSE format)
+function broadcast(eventName, data) {
+  const payload = `event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const res of subscribers) {
+    res.write(payload);
+  }
+}
+
+// Called by the HTTP server when a client connects
+export function addSubscriber(res) {
+  subscribers.add(res);
+
+  // Send the current state ONCE upon connect (still not history—just "now")
+  res.write(`event: hello\ndata: ${JSON.stringify({ connectedAt: Date.now() })}\n\n`);
+  if (currentState) {
+    res.write(`event: state_update\ndata: ${JSON.stringify(currentState)}\n\n`);
   }
 
-  setTimeout(() => {
-    console.log("STATE EXPIRED");
-  }, delay);
+  // Remove subscriber on disconnect
+  res.on("close", () => {
+    subscribers.delete(res);
+  });
 }
+
+// Check expiration periodically (in-memory only)
+setInterval(expireIfNeeded, 1000);
