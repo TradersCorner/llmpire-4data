@@ -7,5 +7,8 @@
     "start": "node src/index.js",
     "watch": "node src/cli/watch-stream.js"
   },
-  "dependencies": {}
+  "devDependencies": {
+    "eslint": "^9.39.2",
+    "eslint-plugin-boundaries": "^5.3.1"
+  }
 }

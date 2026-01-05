@@ -1,0 +1,60 @@
+{
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  },
+  "eslint.enable": true,
+  "eslint.run": "onType",
+  
+  "files.associations": {
+    "*.md": "markdown"
+  },
+  "eslint.validate": [
+    "javascript",
+    "javascriptreact"
+  ],
+  "eslint.options": {
+    "overrideConfigFile": ".eslintrc.json"
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/4data-bridge-metrics": true
+  },
+  "files.watcherExclude": {
+    "**/node_modules/**": true
+  },
+  "javascript.validate.enable": true,
+  "typescript.suggest.autoImports": true,
+  
+  // Visual cues for ephemeral architecture
+  "workbench.colorCustomizations": {
+    "[Default Dark Modern]": {
+      "titleBar.activeBackground": "#1a1a1a",
+      "statusBar.background": "#1a1a1a"
+    }
+  },
+  
+  // Discourage persistence thinking
+  "cSpell.ignoreWords": [
+    "cache",
+    "persist",
+    "storage",
+    "database",
+    "history",
+    "replay",
+    "backfill"
+  ],
+  
+  // Markdown linting for contracts
+  "markdown.validate.enabled": true,
+  "markdown.extension.toc.levels": "2..6",
+  
+  // YAML schema validation for contracts
+  "yaml.schemas": {
+    "https://json.schemastore.org/package.json": "package.json"
+  },
+  
+  // Editor clarity
+  "editor.renderWhitespace": "boundary",
+  "editor.minimap.enabled": false
+}

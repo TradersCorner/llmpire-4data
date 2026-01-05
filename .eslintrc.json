@@ -1,0 +1,109 @@
+{
+  "env": {
+    "node": true,
+    "es2022": true
+  },
+  "parserOptions": {
+    "ecmaVersion": 2022,
+    "sourceType": "module"
+  },
+  "extends": ["eslint:recommended"],
+  "plugins": ["boundaries"],
+  "settings": {
+    "boundaries/elements": [
+      { "type": "v1-core", "pattern": "src/*.js" },
+      { "type": "cli", "pattern": "src/cli/**" },
+      { "type": "data-products", "pattern": "data-products/**" },
+      { "type": "bridge-metrics", "pattern": "4data-bridge-metrics/**" }
+    ]
+  },
+  "rules": {
+    "boundaries/element-types": [
+      "error",
+      {
+        "default": "disallow",
+        "rules": [
+          {
+            "from": "v1-core",
+            "allow": []
+          },
+          {
+            "from": "cli",
+            "allow": ["v1-core"]
+          },
+          {
+            "from": "data-products",
+            "allow": []
+          },
+          {
+            "from": "bridge-metrics",
+            "allow": []
+          }
+        ]
+      }
+    ],
+    "no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "fs",
+            "message": "Direct fs usage forbidden in v1 core. Ephemerality is non-negotiable."
+          },
+          {
+            "name": "fs/promises",
+            "message": "Direct fs usage forbidden in v1 core. Ephemerality is non-negotiable."
+          },
+          {
+            "name": "sqlite3",
+            "message": "Database usage forbidden in v1 core. Process death = data death."
+          },
+          {
+            "name": "better-sqlite3",
+            "message": "Database usage forbidden in v1 core. Process death = data death."
+          },
+          {
+            "name": "level",
+            "message": "Persistent storage forbidden in v1 core."
+          },
+          {
+            "name": "nedb",
+            "message": "Persistent storage forbidden in v1 core."
+          }
+        ],
+        "patterns": [
+          {
+            "group": ["**/db/**", "**/database/**", "**/storage/**"],
+            "message": "Persistence layer imports forbidden in v1 core."
+          }
+        ]
+      }
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.object.name='fs'][callee.property.name=/^(write|append|mkdir|rm)/]",
+        "message": "File system writes forbidden in v1 core."
+      },
+      {
+        "selector": "NewExpression[callee.name=/Database|Pool|Connection/]",
+        "message": "Database connections forbidden in v1 core."
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["src/**/*.js"],
+      "excludedFiles": ["src/cli/**", "4data-bridge-metrics/**"],
+      "rules": {
+        "no-restricted-imports": "error"
+      }
+    },
+    {
+      "files": ["data-products/**/*.js"],
+      "rules": {
+        "no-restricted-imports": "off"
+      }
+    }
+  ]
+}

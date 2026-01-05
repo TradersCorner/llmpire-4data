@@ -1,0 +1,11 @@
+{
+  "recommendations": [
+    "usernamehw.errorlens",
+    "dbaeumer.vscode-eslint",
+    "yzhang.markdown-all-in-one",
+    "redhat.vscode-yaml",
+    "humao.rest-client",
+    "alefragnani.project-manager",
+    "hediet.vscode-drawio"
+  ]
+}
