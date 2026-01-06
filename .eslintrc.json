@@ -11,8 +11,14 @@
   "plugins": ["boundaries"],
   "settings": {
     "boundaries/elements": [
-      { "type": "v1-core", "pattern": "src/*.js" },
-      { "type": "cli", "pattern": "src/cli/**" },
+      { "type": "v1", "pattern": "src/v1/**" },
+      { "type": "magnets", "pattern": "src/magnets/**" },
+      { "type": "lanes", "pattern": "src/lanes/**" },
+      { "type": "bridge", "pattern": "src/bridge/**" },
+      { "type": "forge", "pattern": "src/forge/**" },
+      { "type": "products", "pattern": "src/products/**" },
+      { "type": "llmpire", "pattern": "src/llmpire/**" },
+      { "type": "ui", "pattern": "src/ui/**" },
       { "type": "data-products", "pattern": "data-products/**" },
       { "type": "bridge-metrics", "pattern": "4data-bridge-metrics/**" }
     ]
@@ -23,22 +29,16 @@
       {
         "default": "disallow",
         "rules": [
-          {
-            "from": "v1-core",
-            "allow": []
-          },
-          {
-            "from": "cli",
-            "allow": ["v1-core"]
-          },
-          {
-            "from": "data-products",
-            "allow": []
-          },
-          {
-            "from": "bridge-metrics",
-            "allow": []
-          }
+          { "from": "v1", "allow": [] },
+          { "from": "magnets", "allow": ["v1"] },
+          { "from": "lanes", "allow": ["v1", "magnets"] },
+          { "from": "bridge", "allow": ["lanes"] },
+          { "from": "forge", "allow": ["lanes"] },
+          { "from": "products", "allow": ["forge"] },
+          { "from": "llmpire", "allow": ["products"] },
+          { "from": "ui", "allow": ["products", "llmpire"] },
+          { "from": "data-products", "allow": [] },
+          { "from": "bridge-metrics", "allow": [] }
         ]
       }
     ],

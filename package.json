@@ -4,8 +4,13 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "watch": "node src/cli/watch-stream.js"
+    "start": "node src/v1/index.js",
+    "bridge": "node src/bridge/index.js",
+    "watch": "node src/v1/cli/watch-stream.js",
+    "digest": "node src/digest/index.js"
+  },
+  "dependencies": {
+    "luxon": "^3.5.0"
   },
   "devDependencies": {
     "eslint": "^9.39.2",

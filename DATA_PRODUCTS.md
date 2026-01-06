@@ -7,7 +7,10 @@ This catalog indexes derived data products generated from ephemeral v1 signals. 
 
 ### Regional Capacity Signal
 - **Status**: v1 (stable)
+- **Version**: 1.0.0
 - **Type**: Aggregated operational signal
+- **Lane Origin**: `capacity`
+- **Inputs**: Snapshot (5m window, capacity lane)
 - **Contract**: [regional_capacity_signal.v1.md](data-products/regional_capacity_signal.v1.md)
 - **One-pager**: [REGIONAL_CAPACITY_SIGNAL_ONE_PAGER.md](data-products/REGIONAL_CAPACITY_SIGNAL_ONE_PAGER.md)
 - **Description**: Windowed aggregation of capacity tightening/opening events with derived volatility and confidence metrics

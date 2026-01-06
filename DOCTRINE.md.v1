@@ -1,0 +1,37 @@
+# 4data Doctrine
+
+## Non-negotiables
+- No persistence in v1
+- No replay
+- No silent capture
+- No inference as fact
+- No personalization
+- No cross-lane leakage
+
+## Source of truth
+- Authoritative signals are real-world deltas only.
+- Synthetic/derived output can never be treated as ground truth.
+
+## Lanes and magnets
+- Magnets are pure: classify, don’t mutate or store.
+- Lanes are isolated: independent TTL, viewport, snapshot rules.
+- Cross-lane aggregation must be explicit and auditable.
+
+## Snapshots
+- Only exist when explicitly requested.
+- Must declare lane, window, intent.
+- Discardable immediately; never auto-generated.
+
+## Data factory boundary
+- Begins after snapshots, never before.
+- Only emits derived, non-replayable products.
+- No raw access resale, no identifiers.
+
+## LLM boundary
+- LLMs may see aggregates, summaries, context.
+- LLMs may never see raw streams, timelines, or authoritative signals.
+
+## Governance
+- v1 is frozen (v1.0.0-ephemeral) and enforced by CI.
+- Boundaries enforced by ESLint + folder taxonomy.
+- Violations fail fast (build/lint), not at review.

@@ -1,0 +1,87 @@
+name: invariant-tests
+
+on:
+    pull_request:
+    push:
+        branches: ["**"]
+
+jobs:
+    invariants:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+
+            - name: Setup Node
+              uses: actions/setup-node@v4
+              with:
+                  node-version: "20"
+
+            - name: Install dependencies
+              run: npm ci
+
+            - name: Run invariant tests
+              run: |
+                  set -euo pipefail
+
+                  echo "=== Running Constitutional Invariant Tests ==="
+                  echo ""
+
+                  # Test 1: Snapshot requires lane+window+intent
+                  echo "1. Testing snapshot enforcement..."
+                  npm run start &
+                  V1_PID=$!
+                  npm run bridge &
+                  BRIDGE_PID=$!
+                  sleep 5
+
+                  node test-snapshot.js || {
+                    echo "❌ Snapshot enforcement tests failed"
+                    kill $V1_PID $BRIDGE_PID 2>/dev/null || true
+                    exit 1
+                  }
+
+                  # Test 2: Lane resolver is pure (no API calls)
+                  echo ""
+                  echo "2. Testing lane resolver purity..."
+                  node test-resolver.js || {
+                    echo "❌ Lane resolver tests failed"
+                    kill $V1_PID $BRIDGE_PID 2>/dev/null || true
+                    exit 1
+                  }
+
+                  # Test 3: No cross-lane leakage
+                  echo ""
+                  echo "3. Testing lane isolation..."
+                  RESPONSE=$(curl -s "http://localhost:3001/signals?lane=capacity")
+                  if echo "$RESPONSE" | grep -q '"lane":"capacity"' && ! echo "$RESPONSE" | grep -q '"lane":"prices"'; then
+                    echo "✅ Lane isolation verified"
+                  else
+                    echo "❌ Cross-lane leakage detected"
+                    kill $V1_PID $BRIDGE_PID 2>/dev/null || true
+                    exit 1
+                  fi
+
+                  # Test 4: Restart = no history
+                  echo ""
+                  echo "4. Testing ephemeral guarantee..."
+                  kill $BRIDGE_PID
+                  sleep 1
+                  npm run bridge &
+                  BRIDGE_PID=$!
+                  sleep 3
+                  LANES_RESPONSE=$(curl -s "http://localhost:3001/lanes")
+                  if echo "$LANES_RESPONSE" | grep -q '"count":0'; then
+                    echo "✅ Process restart cleared history"
+                  else
+                    echo "❌ History persisted across restart"
+                    kill $V1_PID $BRIDGE_PID 2>/dev/null || true
+                    exit 1
+                  fi
+
+                  # Cleanup
+                  kill $V1_PID $BRIDGE_PID 2>/dev/null || true
+
+                  echo ""
+                  echo "✅ All invariant tests passed"
+                  echo "Constitutional compliance verified"

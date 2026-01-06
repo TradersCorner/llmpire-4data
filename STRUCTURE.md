@@ -7,14 +7,26 @@ This structure enforces architectural constraints mechanically. Folders are not 
 
 ```
 llmpire-4data/
-├── src/                    # v1 core (FROZEN, ephemeral only)
-│   ├── index.js           # HTTP server
-│   ├── interceptor.js     # Request handler
-│   ├── delta.js           # Delta extraction
-│   ├── stream.js          # SSE broadcaster
-│   └── cli/               # Reference consumers
+├── src/
+│   ├── v1/                # v1 core (FROZEN, ephemeral)
+│   │   ├── index.js
+│   │   ├── interceptor.js
+│   │   ├── delta.js
+│   │   ├── stream.js
+│   │   └── cli/
+│   ├── magnets/           # routing primitives (pure)
+│   ├── lanes/             # categorical substreams
+│   ├── bridge/            # observers + viewport
+│   ├── adapters/          # external stream observers
+│   ├── decay/             # bounded pressure memory
+│   ├── digest/            # informational digests (read-only)
+│   ├── forge/             # snapshot → derived products
+│   ├── composer/          # signals → natural language
+│   ├── products/          # product code (future)
+│   ├── llmpire/           # LLM-facing logic (future)
+│   └── ui/                # UX layer (future)
 │
-├── data-products/         # Product contracts & forge (derived only)
+├── data-products/         # Product contracts & one-pagers
 │   ├── regional_capacity_signal.v1.md
 │   └── REGIONAL_CAPACITY_SIGNAL_ONE_PAGER.md
 │
@@ -36,11 +48,49 @@ llmpire-4data/
 
 ## Boundary Rules
 
-### `src/` (v1 Core)
+### `src/v1`
 - **Allowed**: Native Node modules only (`http`, `events`)
 - **Forbidden**: `fs`, `sqlite`, any persistence layer
 - **Enforced by**: ESLint + CI
 - **Philosophy**: Ephemeral only. Process death = data death.
+
+### `src/magnets`
+- **Allowed**: Pure routing; no side effects
+- **Forbidden**: Aggregation, persistence
+- **Philosophy**: Deterministic classification into lanes
+
+### `src/lanes`
+- **Allowed**: Lane-local logic
+- **Forbidden**: Cross-lane mixing unless explicit aggregation layer
+- **Philosophy**: Independent TTL and snapshot rules
+
+### `src/adapters`
+- **Allowed**: Observe external streams; emit lane-tagged signals; rate limiting; error handling
+- **Forbidden**: Per-user queries; persistence; lane mixing; raw payload emission
+- **Enforced by**: Adapter spec + registry validation
+- **Philosophy**: Extend sensory surface without violating doctrine (ephemeral, lane-scoped, honest)
+
+### `src/decay`
+- **Allowed**: In-memory pressure scores; exponential decay; bounded counters; lane+region keying
+- **Forbidden**: Raw event storage; replay capability; unbounded growth; cross-lane access
+- **Enforced by**: Invariant tests + LRU eviction
+- **Philosophy**: Bounded pressure memory strengthens answers without storage
+
+### `src/digest`
+- **Allowed**: Read-only consumption of bridge APIs; idempotent weekly digest logging
+- **Forbidden**: Persistence, mutation of v1/bridge state, automated capture beyond snapshots
+- **Philosophy**: Informational-only reporting with explicit leader gating
+
+### `src/forge`
+- **Allowed**: Snapshot-only inputs; derived aggregates; deterministic transforms; product schemas
+- **Forbidden**: Live stream access, raw event storage, replay capability, upstream writes
+- **Philosophy**: Snapshots → sellable products; no authority, no capture
+
+### `src/composer`
+- **Allowed**: Snapshot+product+decay → natural language; hedging phrases; deterministic output
+- **Forbidden**: Fact invention, directives ("you should"), personalization, future claims
+- **Enforced by**: Phrase vocabulary + invariant tests
+- **Philosophy**: Infrastructure → language while preserving doctrine (no hallucination, silence is valid)
 
 ### `data-products/`
 - **Allowed**: Aggregation, derivation, non-reversible transforms

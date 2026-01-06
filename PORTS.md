@@ -10,6 +10,16 @@ This document defines **non-negotiable port ownership** for 4data.
   - No UI surfaces
   - No secondary services bind here
 
+- **3001**
+  - Bridge (lane-aware observer)
+  - Lane-scoped API, snapshot endpoint
+  - Read-only queries
+
+- **3002**
+  - Digest health endpoint
+  - `/health-digest` only
+  - Scheduler status, leader flag, next/last run
+
 ## Explicitly Forbidden
 
 - **4000**

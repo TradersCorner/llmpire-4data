@@ -1,0 +1,89 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Regional Capacity Signal v1",
+  "description": "Derived aggregate of capacity lane signals within a time window",
+  "type": "object",
+  "required": [
+    "product",
+    "version",
+    "region",
+    "window",
+    "generatedAt",
+    "counts",
+    "net_state",
+    "volatility",
+    "confidence",
+    "source",
+    "provenance"
+  ],
+  "properties": {
+    "product": {
+      "type": "string",
+      "const": "regional_capacity_signal"
+    },
+    "version": {
+      "type": "string",
+      "const": "v1"
+    },
+    "region": {
+      "type": "string",
+      "description": "Geographic region identifier"
+    },
+    "window": {
+      "type": "string",
+      "enum": ["1m", "5m", "15m", "1h"],
+      "description": "Time window of aggregation"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When this product was generated"
+    },
+    "counts": {
+      "type": "object",
+      "required": ["capacity_tightening", "capacity_opening"],
+      "properties": {
+        "capacity_tightening": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "capacity_opening": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "net_state": {
+      "type": "string",
+      "enum": ["tightening", "opening", "flat"],
+      "description": "Net directional state within window"
+    },
+    "volatility": {
+      "type": "string",
+      "enum": ["low", "moderate", "high"],
+      "description": "Signal frequency classification"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence score based on signal count"
+    },
+    "source": {
+      "type": "string",
+      "const": "forge"
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["snapshotAt"],
+      "properties": {
+        "snapshotAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the source snapshot was generated"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}
