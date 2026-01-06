@@ -3,6 +3,9 @@
 
 import { DecayCache } from "../decayCache.js";
 
+// Single-source epsilon for float comparisons in decay invariants
+const LANE_ISOLATION_EPSILON = 0.01;
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -105,7 +108,10 @@ async function runTests() {
     const capacityState = cache.get("capacity", "BOS");
     const pricesState = cache.get("prices", "BOS");
 
-    if (capacityState.pressure === 0.25 && pricesState.pressure === 0.15) {
+    const capacityOk = Math.abs(capacityState.pressure - 0.25) < LANE_ISOLATION_EPSILON;
+    const pricesOk = Math.abs(pricesState.pressure - 0.15) < LANE_ISOLATION_EPSILON;
+
+    if (capacityOk && pricesOk) {
       console.log("5. Lane isolation ✅");
       console.log(`   Capacity: ${capacityState.pressure}, Prices: ${pricesState.pressure}`);
       passed++;

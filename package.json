@@ -9,7 +9,14 @@
     "watch": "node src/v1/cli/watch-stream.js",
     "digest": "node src/digest/index.js",
     "sidekick:foodtrucks": "tsx src/sidekick/foodtrucks.ts",
-    "vac:evaluate": "tsx src/vac/cli.ts"
+    "vac:evaluate": "tsx src/vac/cli.ts",
+    "check": "node scripts/lisa-check.mjs all",
+    "typecheck": "node scripts/lisa-check.mjs typecheck",
+    "lint": "node scripts/lisa-check.mjs lint",
+    "test": "node scripts/lisa-check.mjs test",
+    "build": "node scripts/lisa-check.mjs build",
+    "audit:lisa": "node scripts/lisa-audit.mjs",
+    "preflight": "npm run check && npm run test && npm run audit:lisa"
   },
   "dependencies": {
     "cheerio": "^1.0.0",
