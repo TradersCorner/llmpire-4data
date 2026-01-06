@@ -7,13 +7,19 @@
     "start": "node src/v1/index.js",
     "bridge": "node src/bridge/index.js",
     "watch": "node src/v1/cli/watch-stream.js",
-    "digest": "node src/digest/index.js"
+    "digest": "node src/digest/index.js",
+    "sidekick:foodtrucks": "tsx src/sidekick/foodtrucks.ts",
+    "vac:evaluate": "tsx src/vac/cli.ts"
   },
   "dependencies": {
+    "cheerio": "^1.0.0",
     "luxon": "^3.5.0"
   },
   "devDependencies": {
+    "@types/node": "^22.10.2",
     "eslint": "^9.39.2",
-    "eslint-plugin-boundaries": "^5.3.1"
+    "eslint-plugin-boundaries": "^5.3.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
   }
 }

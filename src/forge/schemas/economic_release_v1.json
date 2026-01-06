@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "economic_release_v1",
+  "title": "Economic Release Signal v1",
+  "description": "Structured signal for economic data releases",
+  "type": "object",
+  "required": ["lane", "entity", "delta", "direction", "actual", "timestamp", "source", "window"],
+  "properties": {
+    "lane": {
+      "type": "string",
+      "const": "info"
+    },
+    "entity": {
+      "type": "string",
+      "description": "Release identifier (e.g., CPI_YOY)"
+    },
+    "delta": {
+      "type": "number",
+      "description": "Difference from consensus"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["up", "down", "flat", "new"]
+    },
+    "actual": {
+      "type": "number",
+      "description": "Actual published value"
+    },
+    "consensus": {
+      "type": "number",
+      "description": "Consensus/expected value"
+    },
+    "previous": {
+      "type": "number",
+      "description": "Previous period value"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source identifier (e.g., economic_calendar)"
+    },
+    "window": {
+      "type": "string",
+      "const": "release"
+    }
+  }
+}

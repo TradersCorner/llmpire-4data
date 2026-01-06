@@ -157,7 +157,10 @@
   <div class="panel" style="margin: 12px 16px;">
     <div class="section-title">Tags (client-side, in-memory)</div>
     <div class="pill-row" id="tagToggles"></div>
-    <div class="meta" style="margin-top:8px;">Toggles affect rendering only. No persistence. Refresh resets.</div>
+    <div class="control-row" style="margin-top:8px;">
+      <button id="clearFiltersBtn">Clear filters (tags + asset)</button>
+      <div class="meta">Toggles affect rendering only. No persistence. Refresh resets.</div>
+    </div>
   </div>
 
   <div class="page">
@@ -195,6 +198,7 @@
     const recsEl = document.getElementById("recs");
     const laneTogglesEl = document.getElementById("laneToggles");
     const tagTogglesEl = document.getElementById("tagToggles");
+    const clearFiltersBtn = document.getElementById("clearFiltersBtn");
     const assetFilterEl = document.getElementById("assetFilter");
 
     function renderLaneToggles() {
@@ -376,6 +380,14 @@
       renderRecs();
     }
 
+    function clearFilters() {
+      state.activeTags.clear();
+      state.assetFilter = "";
+      assetFilterEl.value = "";
+      renderTagToggles();
+      renderAll();
+    }
+
     function handleSignal(sig) {
       if (sig.type === "tag_recommendation") {
         state.recs.push(sig);
@@ -388,17 +400,36 @@
 
     function startStream() {
       const es = new EventSource(STREAM_URL);
-      es.onmessage = evt => {
+      const handleDataPayload = (raw) => {
+        console.log("STREAM EVENT:", raw);
         try {
-          const data = JSON.parse(evt.data);
+          const data = JSON.parse(raw);
           if (Array.isArray(data)) {
             data.forEach(handleSignal);
           } else {
             handleSignal(data);
           }
         } catch (err) {
-          console.error("Failed to parse event", err, evt.data);
+          console.error("Failed to parse event", err, raw);
         }
+      };
+
+      // v1 stream uses named SSE events (hello/state_update/state_expired)
+      es.addEventListener("hello", evt => {
+        console.log("SSE HELLO:", evt.data);
+      });
+
+      es.addEventListener("state_update", evt => {
+        handleDataPayload(evt.data);
+      });
+
+      es.addEventListener("state_expired", evt => {
+        console.log("SSE STATE_EXPIRED:", evt.data);
+      });
+
+      // Fallback for any unnamed/default events
+      es.onmessage = evt => {
+        handleDataPayload(evt.data);
       };
       es.onerror = err => {
         console.error("SSE error", err);
@@ -413,6 +444,7 @@
         state.assetFilter = e.target.value.trim();
         renderFeed();
       });
+      clearFiltersBtn.addEventListener("click", clearFilters);
       startStream();
     }
 

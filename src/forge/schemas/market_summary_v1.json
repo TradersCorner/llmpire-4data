@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "market_summary_v1",
+  "title": "Market Summary Signal v1",
+  "description": "Structured signal for exchange summary/index metrics",
+  "type": "object",
+  "required": ["lane", "entity", "delta", "direction", "current_value", "timestamp", "source", "window"],
+  "properties": {
+    "lane": {
+      "type": "string",
+      "const": "prices"
+    },
+    "entity": {
+      "type": "string",
+      "description": "Index/metric identifier (e.g., SPX)"
+    },
+    "delta": {
+      "type": "number",
+      "description": "Percentage change"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["up", "down", "flat", "new"]
+    },
+    "current_value": {
+      "type": "number",
+      "description": "Current index value"
+    },
+    "volume": {
+      "type": "number",
+      "description": "Trading volume"
+    },
+    "breadth_ratio": {
+      "type": "number",
+      "description": "Advancing/declining ratio"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source identifier (e.g., exchange_summary)"
+    },
+    "window": {
+      "type": "string",
+      "description": "Time window of observation (e.g., 60s)"
+    }
+  }
+}

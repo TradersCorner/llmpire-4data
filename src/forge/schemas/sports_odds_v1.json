@@ -1,0 +1,55 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "sports_odds_v1",
+  "title": "Sports Odds Signal v1",
+  "description": "Structured signal for sports betting odds movement",
+  "type": "object",
+  "required": ["lane", "category", "entity", "metric", "delta", "direction", "current_value", "timestamp", "source", "window"],
+  "properties": {
+    "lane": {
+      "type": "string",
+      "const": "prices"
+    },
+    "category": {
+      "type": "string",
+      "const": "sports_odds"
+    },
+    "entity": {
+      "type": "string",
+      "description": "Event identifier (e.g., DAL_vs_PHI)"
+    },
+    "metric": {
+      "type": "string",
+      "enum": ["spread", "total", "moneyline"],
+      "description": "Which odds metric moved"
+    },
+    "delta": {
+      "type": "number",
+      "description": "Magnitude of change"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["up", "down", "flat", "new"]
+    },
+    "current_value": {
+      "type": "number",
+      "description": "Current odds value"
+    },
+    "previous_value": {
+      "type": "number",
+      "description": "Previous odds value"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source identifier (e.g., odds_board)"
+    },
+    "window": {
+      "type": "string",
+      "description": "Time window of observation (e.g., 30s)"
+    }
+  }
+}

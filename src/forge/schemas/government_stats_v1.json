@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "government_stats_v1",
+  "title": "Government Statistics Signal v1",
+  "description": "Structured signal for government statistics table updates",
+  "type": "object",
+  "required": ["lane", "entity", "delta", "direction", "current_value", "timestamp", "source", "window"],
+  "properties": {
+    "lane": {
+      "type": "string",
+      "enum": ["capacity", "info"]
+    },
+    "entity": {
+      "type": "string",
+      "description": "Statistic identifier (e.g., CRUDE_OIL_STOCKS)"
+    },
+    "delta": {
+      "type": "number",
+      "description": "Magnitude of change"
+    },
+    "direction": {
+      "type": "string",
+      "enum": ["up", "down", "flat", "new"]
+    },
+    "current_value": {
+      "type": "number",
+      "description": "Current value"
+    },
+    "previous_value": {
+      "type": "number",
+      "description": "Previous value"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Unit of measurement (e.g., million_barrels)"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "source": {
+      "type": "string",
+      "description": "Source identifier (e.g., eia_table)"
+    },
+    "window": {
+      "type": "string",
+      "description": "Time window of observation (e.g., 10m)"
+    }
+  }
+}
