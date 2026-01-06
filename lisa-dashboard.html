@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LISA Personal Awareness Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #161a21;
+      --card: #1d222b;
+      --accent: #4fb3ff;
+      --accent-2: #7df29e;
+      --text: #e6ecf2;
+      --muted: #9aa8b5;
+      --danger: #ff7b7b;
+      --warn: #f2c94c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      padding: 16px;
+      background: var(--panel);
+      border-bottom: 1px solid #1f2630;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: 0.5px;
+    }
+    .pill-row, .control-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #2a323f;
+      background: #1b212c;
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+      transition: border 0.15s ease, background 0.15s ease;
+    }
+    .pill input { margin: 0; }
+    .pill.active { border-color: var(--accent); background: #1f2c3a; }
+    .pill.lane { border-color: #2c3645; }
+    .pill.lane.active { border-color: var(--accent-2); background: #1f2f26; }
+    .input {
+      background: #1b2029;
+      border: 1px solid #2a323f;
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 8px;
+      min-width: 180px;
+    }
+    .page {
+      display: grid;
+      grid-template-columns: 2fr 1fr;
+      gap: 16px;
+      padding: 16px;
+    }
+    @media (max-width: 1100px) {
+      .page { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid #1f2630;
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }
+    .section-title {
+      margin: 0 0 8px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--muted);
+    }
+    .feed-list, .rec-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 75vh;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid #212836;
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: grid;
+      grid-template-columns: 1.4fr 1fr 1fr;
+      gap: 8px;
+      align-items: center;
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+    }
+    .lane {
+      padding: 3px 7px;
+      border-radius: 6px;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      background: #243144;
+      color: var(--accent);
+    }
+    .meta { color: var(--muted); font-size: 12px; }
+    .delta { font-weight: 600; }
+    .delta.pos { color: var(--accent-2); }
+    .delta.neg { color: var(--danger); }
+    .delta.flat { color: var(--muted); }
+    .row-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    button {
+      border: 1px solid #2a323f;
+      background: #1c2430;
+      color: var(--text);
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: border 0.15s ease, transform 0.1s ease;
+    }
+    button:hover { border-color: var(--accent); }
+    button:active { transform: translateY(1px); }
+    .tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: #232c39; color: var(--muted); }
+    .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LISA Personal Awareness Dashboard (Read-Only)</h1>
+    <div class="pill-row" id="laneToggles"></div>
+    <input id="assetFilter" class="input" type="text" placeholder="Asset filter (oil, gold, corn, nfl)" />
+  </header>
+
+  <div class="panel" style="margin: 12px 16px;">
+    <div class="section-title">Tags (client-side, in-memory)</div>
+    <div class="pill-row" id="tagToggles"></div>
+    <div class="meta" style="margin-top:8px;">Toggles affect rendering only. No persistence. Refresh resets.</div>
+  </div>
+
+  <div class="page">
+    <section class="panel">
+      <div class="section-title">Accepted Signals</div>
+      <div class="feed-list" id="feed"></div>
+    </section>
+
+    <section class="panel">
+      <div class="section-title">Untracked Movers (Recommendations)</div>
+      <div class="rec-list" id="recs"></div>
+    </section>
+  </div>
+
+  <script>
+    // Configuration
+    const STREAM_URL = "http://localhost:3000/stream"; // v1 SSE
+    const DEFAULT_TAGS = [
+      "prices:energy",
+      "prices:metals",
+      "sports:odds",
+      "info:macro"
+    ];
+    const DEFAULT_LANES = ["prices", "capacity", "info", "sports", "macro"];
+
+    const state = {
+      feed: [],
+      recs: [],
+      activeTags: new Set(DEFAULT_TAGS),
+      activeLanes: new Set(DEFAULT_LANES),
+      assetFilter: ""
+    };
+
+    const feedEl = document.getElementById("feed");
+    const recsEl = document.getElementById("recs");
+    const laneTogglesEl = document.getElementById("laneToggles");
+    const tagTogglesEl = document.getElementById("tagToggles");
+    const assetFilterEl = document.getElementById("assetFilter");
+
+    function renderLaneToggles() {
+      laneTogglesEl.innerHTML = "";
+      DEFAULT_LANES.forEach(lane => {
+        const pill = document.createElement("label");
+        pill.className = `pill lane ${state.activeLanes.has(lane) ? "active" : ""}`;
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = state.activeLanes.has(lane);
+        cb.onchange = () => {
+          if (cb.checked) state.activeLanes.add(lane); else state.activeLanes.delete(lane);
+          renderFeed();
+        };
+        const span = document.createElement("span");
+        span.textContent = lane.toUpperCase();
+        pill.append(cb, span);
+        laneTogglesEl.appendChild(pill);
+      });
+    }
+
+    function renderTagToggles() {
+      tagTogglesEl.innerHTML = "";
+      DEFAULT_TAGS.forEach(tag => {
+        const pill = document.createElement("label");
+        pill.className = `pill ${state.activeTags.has(tag) ? "active" : ""}`;
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = state.activeTags.has(tag);
+        cb.onchange = () => {
+          if (cb.checked) state.activeTags.add(tag); else state.activeTags.delete(tag);
+          renderAll();
+        };
+        const span = document.createElement("span");
+        span.textContent = tag;
+        pill.append(cb, span);
+        tagTogglesEl.appendChild(pill);
+      });
+    }
+
+    function getSignalTags(sig) {
+      if (Array.isArray(sig.tags)) return sig.tags;
+      if (sig.tag) return [sig.tag];
+      return [];
+    }
+
+    function matchesTags(sig) {
+      const tags = getSignalTags(sig);
+      if (state.activeTags.size === 0) return true;
+      return tags.some(t => state.activeTags.has(t));
+    }
+
+    function matchesLane(sig) {
+      if (!sig.lane) return true;
+      return state.activeLanes.has(String(sig.lane).toLowerCase());
+    }
+
+    function matchesAsset(sig) {
+      if (!state.assetFilter) return true;
+      const needle = state.assetFilter.toLowerCase();
+      return [sig.entity, sig.asset, sig.symbol]
+        .filter(Boolean)
+        .some(v => String(v).toLowerCase().includes(needle));
+    }
+
+    function fmtDirection(dir) {
+      if (dir === "up" || dir === "+") return "↑";
+      if (dir === "down" || dir === "-") return "↓";
+      return "→";
+    }
+
+    function renderFeed() {
+      feedEl.innerHTML = "";
+      const filtered = state.feed.filter(sig => matchesLane(sig) && matchesAsset(sig) && matchesTags(sig));
+      if (filtered.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No signals passing current filters.";
+        feedEl.appendChild(empty);
+        return;
+      }
+      filtered.slice(-400).reverse().forEach(sig => {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const dir = fmtDirection(sig.direction);
+        const delta = sig.delta ?? sig.magnitude ?? sig.value;
+        const deltaClass = delta > 0 ? "pos" : delta < 0 ? "neg" : "flat";
+
+        const header = document.createElement("div");
+        header.className = "card-header";
+        const lane = document.createElement("span");
+        lane.className = "lane";
+        lane.textContent = (sig.lane || "").toString().toUpperCase();
+        const ent = document.createElement("span");
+        ent.textContent = sig.entity || sig.asset || sig.symbol || "(entity)";
+        header.append(lane, ent);
+
+        const mid = document.createElement("div");
+        mid.innerHTML = `<span class="delta ${deltaClass}">${dir} ${delta ?? ""}</span>`;
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const ts = sig.timestamp || sig.time || sig.arrivalTime;
+        meta.textContent = `${ts ? new Date(ts).toLocaleTimeString() : ""} · ${sig.source || sig.origin || ""}`;
+
+        card.append(header, mid, meta);
+        feedEl.appendChild(card);
+      });
+    }
+
+    function renderRecs() {
+      recsEl.innerHTML = "";
+      if (state.recs.length === 0) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No untracked movers right now.";
+        recsEl.appendChild(empty);
+        return;
+      }
+      state.recs.slice(-200).reverse().forEach(rec => {
+        const card = document.createElement("div");
+        card.className = "card";
+
+        const header = document.createElement("div");
+        header.className = "card-header";
+        const lane = document.createElement("span");
+        lane.className = "lane";
+        lane.textContent = (rec.lane || "").toString().toUpperCase();
+        const ent = document.createElement("span");
+        ent.textContent = rec.entity || rec.asset || rec.symbol || "(entity)";
+        header.append(lane, ent);
+
+        const mid = document.createElement("div");
+        mid.innerHTML = `<span class="delta pos">Δ ${rec.delta ?? "?"}</span> · ${rec.window || "window"} · ${rec.reason || "sharp_delta"}`;
+
+        const actions = document.createElement("div");
+        actions.className = "row-actions";
+        const tags = Array.isArray(rec.suggested_tags) ? rec.suggested_tags : [];
+
+        const tagsRow = document.createElement("div");
+        tagsRow.className = "pill-row";
+        tags.forEach(t => {
+          const tagEl = document.createElement("span");
+          tagEl.className = "tag";
+          tagEl.textContent = t;
+          tagsRow.appendChild(tagEl);
+        });
+
+        const addBtn = document.createElement("button");
+        addBtn.textContent = "Add Tag";
+        addBtn.onclick = () => {
+          tags.forEach(t => state.activeTags.add(t));
+          renderTagToggles();
+          renderAll();
+        };
+
+        const ignoreBtn = document.createElement("button");
+        ignoreBtn.textContent = "Ignore (session)";
+        ignoreBtn.onclick = () => {
+          state.recs = state.recs.filter(r => r !== rec);
+          renderRecs();
+        };
+
+        actions.append(addBtn, ignoreBtn);
+
+        const meta = document.createElement("div");
+        meta.className = "meta";
+        const ts = rec.timestamp || rec.time || rec.arrivalTime;
+        meta.textContent = `${ts ? new Date(ts).toLocaleTimeString() : ""} · ${rec.source || "delta-scanner"}`;
+
+        card.append(header, tagsRow, mid, meta, actions);
+        recsEl.appendChild(card);
+      });
+    }
+
+    function renderAll() {
+      renderFeed();
+      renderRecs();
+    }
+
+    function handleSignal(sig) {
+      if (sig.type === "tag_recommendation") {
+        state.recs.push(sig);
+        renderRecs();
+        return;
+      }
+      state.feed.push(sig);
+      renderFeed();
+    }
+
+    function startStream() {
+      const es = new EventSource(STREAM_URL);
+      es.onmessage = evt => {
+        try {
+          const data = JSON.parse(evt.data);
+          if (Array.isArray(data)) {
+            data.forEach(handleSignal);
+          } else {
+            handleSignal(data);
+          }
+        } catch (err) {
+          console.error("Failed to parse event", err, evt.data);
+        }
+      };
+      es.onerror = err => {
+        console.error("SSE error", err);
+      };
+    }
+
+    function init() {
+      renderLaneToggles();
+      renderTagToggles();
+      renderAll();
+      assetFilterEl.addEventListener("input", e => {
+        state.assetFilter = e.target.value.trim();
+        renderFeed();
+      });
+      startStream();
+    }
+
+    init();
+  </script>
+</body>
+</html>
