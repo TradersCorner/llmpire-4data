@@ -30,7 +30,7 @@
     "gov:env:write": "node scripts/gov/print-gov-env.mjs --both --write-env",
     "gov:smoke:e2e": "node scripts/gov/smoke-gov-e2e.mjs",
     "gov:export": "node scripts/gov/export-ndjson.mjs",
-    "gov:prove": "npm run gov:env:write && npm run gov:smoke:e2e -- --require-nonempty"
+    "gov:prove": "node scripts/gov/prove-preflight.mjs && npm run gov:env:write && npm run gov:smoke:e2e -- --require-nonempty"
   },
   "dependencies": {
     "better-sqlite3": "^12.5.0",
