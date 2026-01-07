@@ -76,6 +76,7 @@
       grid-template-columns: 2fr 1fr;
       gap: 16px;
       padding: 16px;
+      align-items: flex-start;
     }
     @media (max-width: 1100px) {
       .page { grid-template-columns: 1fr; }
@@ -145,6 +146,35 @@
     button:active { transform: translateY(1px); }
     .tag { font-size: 11px; padding: 2px 6px; border-radius: 6px; background: #232c39; color: var(--muted); }
     .empty { color: var(--muted); font-size: 13px; padding: 6px 0; }
+    .health-card {
+      background: var(--card);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border: 1px solid #212836;
+    }
+    .health-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    .health-status {
+      font-weight: 600;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+    }
+    .health-status.green { color: #7df29e; background: rgba(125,242,158,0.08); }
+    .health-status.yellow { color: #f2c94c; background: rgba(242,201,76,0.08); }
+    .health-status.red { color: #ff7b7b; background: rgba(255,123,123,0.08); }
+    .health-metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px 10px; font-size: 12px; }
+    .health-metric-label { color: var(--muted); }
+    .health-metric-value { font-weight: 600; }
   </style>
 </head>
 <body>
@@ -170,6 +200,11 @@
     </section>
 
     <section class="panel">
+      <div class="section-title">Bridge Health (ops lane)</div>
+      <div id="bridgeHealth"></div>
+    </section>
+
+    <section class="panel">
       <div class="section-title">Untracked Movers (Recommendations)</div>
       <div class="rec-list" id="recs"></div>
     </section>
@@ -184,18 +219,26 @@
       "sports:odds",
       "info:macro"
     ];
-    const DEFAULT_LANES = ["prices", "capacity", "info", "sports", "macro"];
+    const DEFAULT_LANES = ["prices", "capacity", "info", "sports", "macro", "ops"];
+
+    const BRIDGE_HEALTH_RULES = {
+      GREEN: { maxRetries: 0, allowBackpressure: false },
+      YELLOW: { maxFailures: 0 },
+      RED: { minFailures: 1 },
+    };
 
     const state = {
       feed: [],
       recs: [],
       activeTags: new Set(DEFAULT_TAGS),
       activeLanes: new Set(DEFAULT_LANES),
-      assetFilter: ""
+      assetFilter: "",
+      bridgeHealth: null,
     };
 
     const feedEl = document.getElementById("feed");
     const recsEl = document.getElementById("recs");
+    const bridgeHealthEl = document.getElementById("bridgeHealth");
     const laneTogglesEl = document.getElementById("laneToggles");
     const tagTogglesEl = document.getElementById("tagToggles");
     const clearFiltersBtn = document.getElementById("clearFiltersBtn");
@@ -268,6 +311,83 @@
       if (dir === "up" || dir === "+") return "↑";
       if (dir === "down" || dir === "-") return "↓";
       return "→";
+    }
+
+    function computeBridgeHealthStatus(metrics) {
+      if (!metrics) return "unknown";
+      const retries = Number(metrics.retries || 0);
+      const failures = Number(metrics.failures || 0);
+      const queue = Number(metrics.queue || 0);
+      const backpressureEvents = Number(metrics.backpressureCount || 0);
+
+      if (failures >= BRIDGE_HEALTH_RULES.RED.minFailures || backpressureEvents > 0) {
+        return "red";
+      }
+      if (retries > BRIDGE_HEALTH_RULES.YELLOW.maxFailures || queue > 0) {
+        return "yellow";
+      }
+      if (
+        retries <= BRIDGE_HEALTH_RULES.GREEN.maxRetries &&
+        backpressureEvents === 0
+      ) {
+        return "green";
+      }
+      return "yellow";
+    }
+
+    function renderBridgeHealth() {
+      bridgeHealthEl.innerHTML = "";
+      const sig = state.bridgeHealth;
+      if (!sig || !sig.metrics) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        empty.textContent = "No bridge health samples yet.";
+        bridgeHealthEl.appendChild(empty);
+        return;
+      }
+
+      const metrics = sig.metrics;
+      const status = computeBridgeHealthStatus(metrics);
+
+      const card = document.createElement("div");
+      card.className = "health-card";
+
+      const header = document.createElement("div");
+      header.className = "health-header";
+      const title = document.createElement("div");
+      title.textContent = "Bridge → v1";
+      const statusEl = document.createElement("span");
+      statusEl.className = `health-status ${status}`;
+      statusEl.textContent = status.toUpperCase();
+      header.append(title, statusEl);
+
+      const grid = document.createElement("div");
+      grid.className = "health-metrics";
+
+      function addMetric(label, value) {
+        const wrap = document.createElement("div");
+        const l = document.createElement("div");
+        l.className = "health-metric-label";
+        l.textContent = label;
+        const v = document.createElement("div");
+        v.className = "health-metric-value";
+        v.textContent = String(value ?? 0);
+        wrap.append(l, v);
+        grid.appendChild(wrap);
+      }
+
+      addMetric("forwarded", metrics.forwarded);
+      addMetric("dropped", metrics.dropped);
+      addMetric("duplicates", metrics.duplicates);
+      addMetric("oversize", metrics.oversize);
+      addMetric("retries", metrics.retries);
+      addMetric("failures", metrics.failures);
+      addMetric("backpressureCount", metrics.backpressureCount);
+      addMetric("queue", metrics.queue);
+      addMetric("inFlight", metrics.inFlight);
+
+      card.append(header, grid);
+      bridgeHealthEl.appendChild(card);
     }
 
     function renderFeed() {
@@ -378,6 +498,7 @@
     function renderAll() {
       renderFeed();
       renderRecs();
+      renderBridgeHealth();
     }
 
     function clearFilters() {
@@ -392,6 +513,15 @@
       if (sig.type === "tag_recommendation") {
         state.recs.push(sig);
         renderRecs();
+        return;
+      }
+
+      if (sig.kind === "bridge_health" || sig.signal === "bridge.health") {
+        state.bridgeHealth = sig;
+        renderBridgeHealth();
+        // Also surface in the generic feed so lane filters can reveal ops signals
+        state.feed.push(sig);
+        renderFeed();
         return;
       }
       state.feed.push(sig);

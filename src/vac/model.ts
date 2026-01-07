@@ -60,6 +60,7 @@ export interface ClaimDecision {
   ruleSetVersion: string; // for reproducibility
   reasons: string[]; // machine- and human-readable reason codes
   decidedAt: string; // ISO
+  decisionMeta?: ClaimDecisionMeta;
 }
 
 export interface ExposureSnapshot {
@@ -68,6 +69,13 @@ export interface ExposureSnapshot {
   claimStatus: ClaimStatus;
   exposureTier: 'blocked' | 'limited' | 'normal' | 'boosted';
   routingWeight: number; // higher = preferred
+}
+
+export type IngestionHealth = 'green' | 'yellow' | 'red' | 'unknown';
+
+export interface ClaimDecisionMeta {
+  ingestionHealth: IngestionHealth;
+  evaluatedAt: string; // ISO, derived from claim/evidence timestamps (not wall clock)
 }
 
 export function nowIso(): string {

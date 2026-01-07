@@ -11,6 +11,9 @@ export const LANES = {
   business_movement: {
     description: "Business open/close/relocation activity",
   },
+  ops: {
+    description: "Operational health and telemetry for internal systems",
+  },
   unknown: {
     description: "Unclassified signals (should be rare and audited)",
   },

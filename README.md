@@ -131,6 +131,49 @@ Shows scheduler status, leader flag, next/last run times, and uptime.
 
 ---
 
+## Sidekick  v1 Bridge (Ops-grade)
+
+The bridge connects Sidekick NDJSON output to the v1 `/request` endpoint in a
+deterministic, auditable way.
+
+### Modes
+
+- **Live**
+
+	```bash
+	npm run bridge:sidekick
+	```
+
+	Requires v1 running on http://localhost:3000.
+
+- **Dry-run (no POSTs)**
+
+	```bash
+	npm run bridge:sidekick:dry
+	```
+
+	Prints reduced payloads to stdout for inspection.
+
+### Guarantees
+
+- Deterministic ordering (maxInFlight = 1)
+- Idempotency via eventId + TTL de-dup
+- Backpressure with pause/resume
+- Bounded shutdown drain
+- Size-guarded raw payloads
+- Periodic `bridge_health` events (ops lane)
+
+### Offline verification (no v1 required)
+
+```bash
+npm test
+```
+
+Includes a harness that feeds NDJSON into the bridge in `--dryRun` mode and
+asserts duplicate dropping, oversize truncation, and health metrics.
+
+---
+
 ## Contributing
 
 **Read [DOCTRINE.md](DOCTRINE.md) first.** It defines non-negotiable architectural laws.
@@ -184,11 +227,53 @@ node digest_dst_scheduling.test.js  # DST-safe Monday 08:00 scheduling
 node src/forge/tests/forge-regional-capacity.test.js  # Forge product builder
 ```
 
+### Preflight
+
+```bash
+npm run preflight
+```
+
+> **Note:** One integration test is intentionally skipped unless
+> `V1_INTEGRATION=1` is set and v1 is running.
+
 ### CI Guardrails
 - **core-guardrails.yml**: Blocks v1 drift vs `v1.0.0-ephemeral`
 - **invariant-tests.yml**: Protects constitutional compliance
 
 All tests must pass before merge.
+
+---
+
+### Governance Metrics (Read-Only)
+
+The system exposes read-only territory metrics derived from DecisionCard, FeedbackContext, and AdminActionLog—without modifying verification logic.
+
+Endpoints:
+- GET /gov/territory/:id/metrics?window=24h|7d|30d
+- GET /gov/territory/:id/metrics/history?window=…&limit=…
+- GET /gov/metrics?window=…
+
+Guarantees: deterministic aggregation, recomputable cache, no VAC/ingestion writes.
+Tag: territory-governance-metrics-v1
+
+### Governance Queues (Read-Only)
+
+The system exposes read-only moderator queues derived from existing projections.
+These endpoints do not mutate state and may return empty results when no data
+sources are wired.
+
+Endpoints:
+- GET /gov/territory/:id/queues?queue=...
+- GET /gov/moderator/:id/queues?queue=...
+
+Queue types:
+paused_by_ops, blocked, needs_refresh, needs_second_source, none
+
+Guarantees:
+- Deterministic ordering
+- Leak-safe QueueItem projection (no VAC reason codes or ops internals)
+- Read-only selectors; no writes
+Tag: territory-governance-queues-v1
 
 ---
 

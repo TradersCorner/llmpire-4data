@@ -149,6 +149,39 @@ Adapters emit minimal deltas with lane assignment and confidence hints. They nev
 
 ---
 
+### Governance Metrics (Read-Only)
+
+The system exposes read-only territory metrics derived from DecisionCard, FeedbackContext, and AdminActionLog—without modifying verification logic.
+
+Endpoints:
+- GET /gov/territory/:id/metrics?window=24h|7d|30d
+- GET /gov/territory/:id/metrics/history?window=…&limit=…
+- GET /gov/metrics?window=…
+
+Guarantees: deterministic aggregation, recomputable cache, no VAC/ingestion writes.
+Tag: territory-governance-metrics-v1
+
+### Governance Queues (Read-Only)
+
+The system exposes read-only moderator queues derived from existing projections.
+These endpoints do not mutate state and may return empty results when no data
+sources are wired.
+
+Endpoints:
+- GET /gov/territory/:id/queues?queue=...
+- GET /gov/moderator/:id/queues?queue=...
+
+Queue types:
+paused_by_ops, blocked, needs_refresh, needs_second_source, none
+
+Guarantees:
+- Deterministic ordering
+- Leak-safe QueueItem projection (no VAC reason codes or ops internals)
+- Read-only selectors; no writes
+Tag: territory-governance-queues-v1
+
+---
+
 ## Conclusion
 
 4data provides the live state. LSA decides when to look.

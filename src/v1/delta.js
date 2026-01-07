@@ -13,7 +13,9 @@ function buildLane(delta) {
 
   let lane;
 
-  if (delta.signal.startsWith("capacity_")) {
+  if (delta.signal === "bridge.health" || delta.signal.startsWith("bridge_")) {
+    lane = "ops";
+  } else if (delta.signal.startsWith("capacity_")) {
     lane = "capacity";
   } else if (delta.signal.startsWith("price_")) {
     lane = "prices";
