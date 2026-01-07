@@ -48,6 +48,8 @@ export function buildGovQueuesAdapter({
       .map((dc) => dc?.decisionId)
       .filter((id) => typeof id === 'string' && id);
 
+    console.log(`[gov][adapter] territory=${territoryId} decisionCards=${decisionCards.length} decisionIds=${decisionIds.length}`);
+
     const feedbackContexts = await readFeedback(decisionIds);
 
     const result = moderatorQueuesApi.getTerritoryQueues({

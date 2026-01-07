@@ -57,6 +57,7 @@ function decide(
   return {
     id: newId(),
     claimId: ctx.claim.id,
+    subjectId: ctx.claim.subjectId,
     status,
     ruleSetVersion: ctx.ruleSetVersion,
     reasons: [...reasons].sort(),

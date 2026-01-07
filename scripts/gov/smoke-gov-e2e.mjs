@@ -3,7 +3,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import http from "node:http";
+import net from "node:net";
 
+const REQUIRE_NONEMPTY = process.argv.includes("--require-nonempty");
 const repoRoot = findRepoRoot(process.cwd());
 
 function findRepoRoot(startDir) {
@@ -33,6 +35,23 @@ function get(url) {
 
 function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+async function getFreePort() {
+  return await new Promise((resolve, reject) => {
+    const srv = net.createServer();
+    srv.unref();
+    srv.on("error", reject);
+    srv.listen(0, "127.0.0.1", () => {
+      const addr = srv.address();
+      if (!addr || typeof addr === "string") {
+        srv.close();
+        return reject(new Error("could not allocate free port"));
+      }
+      const port = addr.port;
+      srv.close(() => resolve(port));
+    });
+  });
 }
 
 function parseNdjsonFirstTerritoryId(filePath) {
@@ -94,17 +113,52 @@ async function waitForReady(baseUrl) {
   throw new Error(`server did not become reachable within 30s at ${baseUrl}`);
 }
 
-function startServer(env) {
-  const child = spawn(process.platform === "win32" ? "npm.cmd" : "npm", ["start"], {
+function startServer(env, port) {
+  const fullEnv = { ...process.env, ...env, PORT: String(port) };
+  const entry = path.join(repoRoot, "src", "v1", "index.js");
+
+  const child = spawn(process.execPath, [entry], {
     cwd: repoRoot,
-    env: { ...process.env, ...env },
+    env: fullEnv,
     stdio: ["ignore", "pipe", "pipe"],
+    windowsHide: true,
   });
 
-  child.stdout.on("data", (d) => process.stdout.write(d));
-  child.stderr.on("data", (d) => process.stderr.write(d));
+  let readyResolve;
+  let readyReject;
+  const ready = new Promise((resolve, reject) => {
+    readyResolve = resolve;
+    readyReject = reject;
+  });
 
-  return child;
+  let stdoutBuf = "";
+  child.stdout.on("data", (d) => {
+    const s = d.toString("utf8");
+    process.stdout.write(s);
+    stdoutBuf += s;
+
+    // Strong readiness: we only proceed when THIS child says it's listening.
+    if (stdoutBuf.includes(`4data listening on http://localhost:${port}`)) {
+      readyResolve(true);
+    }
+
+    // Keep buffer bounded
+    if (stdoutBuf.length > 10_000) stdoutBuf = stdoutBuf.slice(-5_000);
+  });
+
+  let stderrBuf = "";
+  child.stderr.on("data", (d) => {
+    const s = d.toString("utf8");
+    process.stderr.write(s);
+    stderrBuf += s;
+    if (stderrBuf.length > 10_000) stderrBuf = stderrBuf.slice(-5_000);
+  });
+
+  child.once("exit", (code) => {
+    readyReject(new Error(`server exited early (code ${code ?? "?"})`));
+  });
+
+  return { child, ready };
 }
 
 function stopServer(child) {
@@ -128,12 +182,12 @@ function stableShapeSignature(obj) {
 async function fetchQueues(baseUrl, territoryId) {
   // Try a few variants because we don't assume whether "queue" is required.
   const candidates = [
-    `/gov/territory/${encodeURIComponent(territoryId)}/queues?includeNone=1`,
-    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=none&includeNone=1`,
-    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=needs_refresh&includeNone=1`,
-    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=needs_second_source&includeNone=1`,
-    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=blocked&includeNone=1`,
-    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=paused_by_ops&includeNone=1`,
+    `/gov/territory/${encodeURIComponent(territoryId)}/queues?includeNone=true`,
+    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=none&includeNone=true`,
+    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=needs_refresh&includeNone=true`,
+    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=needs_second_source&includeNone=true`,
+    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=blocked&includeNone=true`,
+    `/gov/territory/${encodeURIComponent(territoryId)}/queues?queue=paused_by_ops&includeNone=true`,
   ];
 
   let last = null;
@@ -146,19 +200,29 @@ async function fetchQueues(baseUrl, territoryId) {
 }
 
 function countQueueItems(bodyObj) {
-  // tolerant to shape: sums arrays found under body.queues[*]
-  const queues = bodyObj?.queues;
-  if (!queues || typeof queues !== "object") return 0;
-  let total = 0;
-  for (const k of Object.keys(queues)) {
-    const v = queues[k];
-    if (Array.isArray(v)) total += v.length;
+  const q = bodyObj?.queues;
+
+  // Your actual API returns: { territoryId, queues: [...] }
+  if (Array.isArray(q)) return q.length;
+
+  // Backward-compatible: if someone later returns { queues: {k:[...]} }
+  if (q && typeof q === "object") {
+    let total = 0;
+    for (const k of Object.keys(q)) {
+      const v = q[k];
+      if (Array.isArray(v)) total += v.length;
+    }
+    return total;
   }
-  return total;
+
+  return 0;
 }
 
 async function main() {
-  const baseUrl = `http://localhost:${process.env.PORT || "3000"}`;
+  const port = await getFreePort();
+  const baseUrl = `http://localhost:${port}`;
+
+  console.error(`[smoke] using port=${port}`);
 
   // Step 1: ensure .env.gov exists by running your helper with --write-env
   console.error("[smoke] generating .env.gov via print-gov-env.mjs --both --write-env");
@@ -193,6 +257,7 @@ async function main() {
   const territoryId = parseNdjsonFirstTerritoryId(decisionPath);
   if (!territoryId) {
     console.error(`[smoke] could not find a territoryId in decision cards: ${decisionPath}`);
+    console.error(`[smoke] Exports must contain real claims with subjectId (territoryId). Refusing to proceed with synthetic fallback.`);
     process.exit(1);
   }
 
@@ -200,14 +265,16 @@ async function main() {
 
   // Step 2: run server with live OFF
   console.error("[smoke] starting server with GOV_QUEUES_LIVE=0");
-  let child = startServer({
+  let started = startServer({
     GOV_QUEUES_LIVE: "0",
     GOV_DECISION_CARDS_PATH: decisionPath,
     GOV_ADMIN_QUEUES_PATH: adminPath,
-  });
+  }, port);
+
+  let child = started.child;
 
   try {
-    await waitForReady(baseUrl);
+    await started.ready;
     const off = await fetchQueues(baseUrl, territoryId);
     if (!off.ok) {
       console.error("[smoke] live OFF: queues endpoint did not return 2xx");
@@ -231,13 +298,14 @@ async function main() {
     await stopServer(child);
 
     console.error("[smoke] starting server with GOV_QUEUES_LIVE=1");
-    child = startServer({
+    started = startServer({
       GOV_QUEUES_LIVE: "1",
       GOV_DECISION_CARDS_PATH: decisionPath,
       GOV_ADMIN_QUEUES_PATH: adminPath,
-    });
+    }, port);
 
-    await waitForReady(baseUrl);
+    child = started.child;
+    await started.ready;
     const on = await fetchQueues(baseUrl, territoryId);
     if (!on.ok) {
       console.error("[smoke] live ON: queues endpoint did not return 2xx");
@@ -263,9 +331,21 @@ async function main() {
       process.exit(1);
     }
 
-    if (onCount < offCount) {
-      console.error("[smoke][FAIL] live ON returned fewer items than live OFF (unexpected)");
-      process.exit(1);
+    // Note: live OFF is intentionally empty (returns [] when GOV_QUEUES_LIVE=0)
+    // so we only enforce non-empty for live ON when real exports are loaded.
+
+    if (REQUIRE_NONEMPTY) {
+      // This is the whole point: prove live data actually surfaces queue items
+      if (onCount <= 0) {
+        console.error("[smoke][FAIL] --require-nonempty set but live ON returned 0 queue items.");
+        console.error("[smoke] Likely causes:");
+        console.error("  - decision_card has no matching territoryId for the queried territory");
+        console.error("  - decisionId overlap between decision_card and admin_queue is 0");
+        console.error("  - queue filter excludes all items (try includeNone=true and queue=none)");
+        console.error("  - adminQueue projection not present (decision cards default to none)");
+        process.exit(1);
+      }
+      console.error(`[smoke] PASS: live ON has ${onCount} queue items (non-empty requirement met)`);
     }
 
     console.error("[smoke][PASS] GOV queues contract stable; live toggle loads real data");

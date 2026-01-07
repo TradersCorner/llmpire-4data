@@ -19,6 +19,8 @@
     "typecheck": "node scripts/lisa-check.mjs typecheck",
     "lint": "node scripts/lisa-check.mjs lint",
     "test": "node scripts/lisa-check.mjs test",
+    "test:unit": "npm test",
+    "test:integration": "node --test",
     "build": "node scripts/lisa-check.mjs build",
     "audit:lisa": "node scripts/lisa-audit.mjs",
     "preflight": "npm run check && npm run test && npm run audit:lisa",
@@ -28,7 +30,7 @@
     "gov:env:write": "node scripts/gov/print-gov-env.mjs --both --write-env",
     "gov:smoke:e2e": "node scripts/gov/smoke-gov-e2e.mjs",
     "gov:export": "node scripts/gov/export-ndjson.mjs",
-    "gov:prove": "npm run gov:export && npm run gov:env:write && npm run gov:smoke:e2e"
+    "gov:prove": "npm run gov:env:write && npm run gov:smoke:e2e -- --require-nonempty"
   },
   "dependencies": {
     "better-sqlite3": "^12.5.0",

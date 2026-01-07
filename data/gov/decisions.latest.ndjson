@@ -1,0 +1,1 @@
+{"kind":"decision","id":"1e499a15-e198-45d4-b92a-73cdf4f88fbc","claimId":"claim-website-001","subjectId":"county:12033","status":"manual_review","ruleSetVersion":"vac-business-v1","reasons":["multi_domain.required.for.verification","single.domain.only"],"decidedAt":"2026-01-07T20:03:31.335Z","decisionMeta":{"ingestionHealth":"unknown","evaluatedAt":"2024-12-16T12:00:00.000Z"}}

@@ -270,7 +270,7 @@ const server = http.createServer(async (req, res) => {
         segments[1] === "territory" &&
         segments[3] === "queues"
       ) {
-        const territoryId = segments[2];
+        const territoryId = decodeURIComponent(segments[2]);
         const queue = url.searchParams.get("queue");
         const includeNone = url.searchParams.get("includeNone");
 
@@ -291,7 +291,7 @@ const server = http.createServer(async (req, res) => {
         segments[1] === "moderator" &&
         segments[3] === "queues"
       ) {
-        const moderatorId = segments[2];
+        const moderatorId = decodeURIComponent(segments[2]);
         const queue = url.searchParams.get("queue");
         const includeNone = url.searchParams.get("includeNone");
 
@@ -312,7 +312,7 @@ const server = http.createServer(async (req, res) => {
         segments[1] === "territory" &&
         segments[3] === "metrics"
       ) {
-        const territoryId = segments[2];
+        const territoryId = decodeURIComponent(segments[2]);
         const window = url.searchParams.get("window");
 
         const result = territoryMetricsApi.getTerritoryLatest({ territoryId, window });
@@ -328,7 +328,7 @@ const server = http.createServer(async (req, res) => {
         segments[3] === "metrics" &&
         segments[4] === "history"
       ) {
-        const territoryId = segments[2];
+        const territoryId = decodeURIComponent(segments[2]);
         const window = url.searchParams.get("window");
         const limit = url.searchParams.get("limit");
 
@@ -354,7 +354,9 @@ const server = http.createServer(async (req, res) => {
   res.end("Not found");
 });
 
-server.listen(3000, () => {
-  console.log("4data listening on http://localhost:3000");
-  console.log("SSE stream:       http://localhost:3000/stream");
+const port = Number(process.env.PORT || 3000);
+
+server.listen(port, () => {
+  console.log(`4data listening on http://localhost:${port}`);
+  console.log(`SSE stream:       http://localhost:${port}/stream`);
 });

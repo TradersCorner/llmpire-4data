@@ -1,6 +1,8 @@
-import readline from 'node:readline';
-import { stdin as input, stdout as output, stderr as errorOutput } from 'node:process';
-import { buildDecisionCard } from './DecisionCard.mjs';
+import readline from "node:readline";
+import { stdin as input, stdout as output, stderr as errorOutput } from "node:process";
+import { buildDecisionCard } from "./DecisionCard.mjs";
+import { resolveFeedbackContext } from "../feedback/feedbackContext.mjs";
+import { deriveAdminQueue } from "../admin/adminQueues.mjs";
 
 /**
  * Decision Card CLI
@@ -8,21 +10,27 @@ import { buildDecisionCard } from './DecisionCard.mjs';
  * Reads NDJSON ClaimDecision records from stdin (as emitted by the VAC CLI)
  * and emits NDJSON DecisionCard records to stdout.
  *
- * Expected input shape per line:
- *   { "kind": "decision", ...ClaimDecision, evidenceSummary?: EvidenceSummary }
+ * Input line:
+ *   { "kind": "decision", ...ClaimDecision, bridgeHealth?: any, evidenceSummary?: any }
  *
- * Output shape per line:
- *   { "kind": "decision_card", "decisionId": string, "card": DecisionCard }
+ * Output line:
+ *   {
+ *     "kind": "decision_card",
+ *     "decisionId": string|null,
+ *     "territoryId": string|null,
+ *     "adminQueue": string,
+ *     "card": DecisionCard
+ *   }
  */
 
 function isRecord(value) {
-  return typeof value === 'object' && value !== null;
+  return typeof value === "object" && value !== null;
 }
 
 function main() {
   const rl = readline.createInterface({ input, crlfDelay: Infinity });
 
-  rl.on('line', (line) => {
+  rl.on("line", (line) => {
     const trimmed = line.trim();
     if (!trimmed) return;
 
@@ -30,21 +38,32 @@ function main() {
       const parsed = JSON.parse(trimmed);
       if (!isRecord(parsed)) return;
 
-      if (parsed.kind !== 'decision') {
-        // Ignore non-decision records; this CLI is a focused projection.
+      if (parsed.kind !== "decision") {
         return;
       }
 
-      const { evidenceSummary, ...decisionRest } = parsed;
+      const { evidenceSummary, bridgeHealth, ...decisionRest } = parsed;
       const decision = { ...decisionRest };
 
-      // Some VAC pipelines may not include an explicit id; fall back safely.
-      const decisionId = typeof decision.id === 'string' ? decision.id : null;
+      const decisionId = typeof decision.id === "string" ? decision.id : null;
+
+      // NOTE: current system uses subjectId as territoryId for GOV queues.
+      // If you want "subjectId = businessId" later, you must add a real territoryId field to decisions.
+      const territoryId = typeof decision.subjectId === "string" ? decision.subjectId : null;
+
+      const feedbackContext = resolveFeedbackContext(decision, bridgeHealth || undefined);
+      const adminQueue = deriveAdminQueue(decision, feedbackContext);
 
       const card = buildDecisionCard(decision, evidenceSummary ?? null);
 
       output.write(
-        JSON.stringify({ kind: 'decision_card', decisionId, card }) + '\n',
+        JSON.stringify({
+          kind: "decision_card",
+          decisionId,
+          territoryId,
+          adminQueue,
+          card,
+        }) + "\n",
       );
     } catch (err) {
       errorOutput.write(
@@ -53,9 +72,9 @@ function main() {
     }
   });
 
-  rl.on('close', () => {
-    // No flush needed; this CLI is purely streaming.
-  });
+  rl.on("close", () => {});
+
+  return;
 }
 
 main();
