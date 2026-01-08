@@ -359,6 +359,7 @@
       receivedCount: 0,
       acceptedCount: 0,
       watchMatchedCount: 0,
+      lastMatchAt: null,
     };
 
     const feedEl = document.getElementById("feed");
@@ -454,6 +455,7 @@
       if (lower === "unwatch" || lower === "watch off" || lower === "stop") return { cmd: "unwatch", args: "" };
       if (lower === "watch" || lower === "watch status" || lower === "status") return { cmd: "watchstatus", args: "" };
       if (lower.startsWith("watch ")) return { cmd: "watch", args: t.slice(6).trim() };
+      if (lower.startsWith("follow ")) return { cmd: "follow", args: t.slice(7).trim() }; // alias for watch
       if (lower.startsWith("inject ")) return { cmd: "inject", args: t.slice(7).trim() };
 
       return { cmd: null, args: "" };
@@ -786,6 +788,7 @@
       
       if (watchMatched && panelPassed && shouldEmitLiveChat(liveGate, sig)) {
         state.watchMatchedCount++;
+        state.lastMatchAt = Date.now();
         const summary = formatSignalForChat(sig);
         addChatMessage("assistant", `🔴 LIVE: ${summary}`);
       }
@@ -868,22 +871,45 @@
       if (!statusEl) return;
       
       // Panel filter status
-      const panelLanes = Array.from(state.panelFilter.activeLanes).join("+") || "none";
-      const panelTags = Array.from(state.panelFilter.activeTags).slice(0, 2).join(", ") || "none";
-      const panelTagsSuffix = state.panelFilter.activeTags.size > 2 ? ` +${state.panelFilter.activeTags.size - 2} more` : "";
-      const panelAsset = state.panelFilter.assetFilter || "none";
+      const panelLanes = Array.from(state.panelFilter.activeLanes).join("+") || "all";
+      const panelTags = Array.from(state.panelFilter.activeTags).slice(0, 2).join(", ") || "all";
+      const panelTagsSuffix = state.panelFilter.activeTags.size > 2 ? ` +${state.panelFilter.activeTags.size - 2}` : "";
+      const panelAsset = state.panelFilter.assetFilter || "all";
       
       // Watch filter status
-      let watchStatus = "off";
-      if (watchFilter.kind && watchFilter.kind !== "off") {
+      const isWatching = watchFilter.kind && watchFilter.kind !== "off";
+      let watchStatus = "⏸️ off";
+      let watchDetails = "";
+      
+      if (isWatching) {
         const mode = watchFilter.mode || "contains";
-        watchStatus = `${watchFilter.kind} ${mode} "${watchFilter.value}"`;
+        const scopeDesc = watchFilter.kind === "entity" ? "entity/asset/symbol" : watchFilter.kind;
+        watchStatus = `🔴 ${scopeDesc} ${mode} "${watchFilter.value}"`;
+        
+        // Last match timing
+        const matchAge = state.lastMatchAt ? Math.floor((Date.now() - state.lastMatchAt) / 1000) : null;
+        const matchTiming = matchAge !== null ? `${matchAge}s ago` : "—";
+        watchDetails = `<div style="margin-top: 3px; font-size: 10px; color: var(--muted);">Last match: ${matchTiming} | Matches: ${state.watchMatchedCount}</div>`;
+        
+        // Actionable diagnosis (why you might not see hits)
+        let diagnosis = "";
+        if (state.receivedCount === 0) {
+          diagnosis = `<div style="margin-top: 4px; padding: 4px 6px; background: rgba(255,123,123,0.08); border-left: 2px solid #ff7b7b; font-size: 10px;">⚠️ No stream signals yet. <a href="#" onclick="location.reload(); return false;" style="color: var(--accent); text-decoration: underline;">Reconnect</a></div>`;
+        } else if (state.receivedCount > 0 && state.acceptedCount === 0) {
+          diagnosis = `<div style="margin-top: 4px; padding: 4px 6px; background: rgba(242,201,76,0.08); border-left: 2px solid #f2c94c; font-size: 10px;">⚠️ Panel filters blocking all signals. <a href="#" onclick="document.getElementById('clearFiltersBtn').click(); return false;" style="color: var(--accent); text-decoration: underline;">Clear filters</a></div>`;
+        } else if (state.acceptedCount > 0 && state.watchMatchedCount === 0) {
+          const broaderCmd = watchFilter.kind === "entity" ? `any:${watchFilter.value}` : watchFilter.value;
+          diagnosis = `<div style="margin-top: 4px; padding: 4px 6px; background: rgba(242,201,76,0.08); border-left: 2px solid #f2c94c; font-size: 10px;">💡 No matches for "${watchFilter.value}" in accepted signals. Try <span style="color: var(--accent); cursor: pointer;" onclick="document.getElementById('chatInput').value='watch ${broaderCmd}'; document.getElementById('chatSend').click();">watch ${broaderCmd}</span> or <span style="color: var(--accent); cursor: pointer;" onclick="document.getElementById('chatInput').value='status'; document.getElementById('chatSend').click();">status</span></div>`;
+        }
+        
+        watchDetails += diagnosis;
       }
       
       statusEl.innerHTML = `
         <div style="font-size: 11px; color: var(--muted); padding: 6px 0; border-bottom: 1px solid #1f2630;">
-          <div style="margin-bottom: 3px;"><strong>Panel:</strong> ${panelLanes} | tags: ${panelTags}${panelTagsSuffix} | asset: ${panelAsset}</div>
+          <div style="margin-bottom: 2px;"><strong>Panel:</strong> ${panelLanes} | tags: ${panelTags}${panelTagsSuffix} | asset: ${panelAsset}</div>
           <div><strong>Watch:</strong> ${watchStatus}</div>
+          ${watchDetails}
         </div>
       `;
     }
@@ -958,12 +984,14 @@
       const parsed = parseChatCommand(question);
       
       // Handle watch commands
-      if (parsed.cmd === "watch") {
+      if (parsed.cmd === "watch" || parsed.cmd === "follow") {
         if (!parsed.args) return "Usage: watch oil | watch lane:prices | watch any:btc | watch exact:cl\nNote: Watch filter respects panel filters (lanes/tags/asset).";
         watchFilter = buildFilterFromWatchArgs(parsed.args);
         state.watchMatchedCount = 0; // reset counter
+        state.lastMatchAt = null; // reset last match time
         renderFilterStatus();
-        return `🔴 Watching: ${watchFilter.kind} "${watchFilter.value}" (${watchFilter.mode}).\nLIVE updates respect panel filters.`;
+        const aliasNote = parsed.cmd === "follow" ? "\n(Using watch — follow is an alias)" : "";
+        return `🔴 Watching: ${watchFilter.kind} "${watchFilter.value}" (${watchFilter.mode}).\nLIVE updates respect panel filters.${aliasNote}`;
       }
       
       if (parsed.cmd === "unwatch") {
