@@ -901,11 +901,19 @@
       setInterval(renderStreamHealth, 1000); // update every second
       
       // Runtime self-check (dev mode only): log diagnostics every 10s
-      // STRICT DEV GATE: localhost AND not production domain
-      const IS_DEV =
-        (location.hostname === "localhost" || location.hostname === "127.0.0.1") &&
-        !location.hostname.endsWith(".thetradescout.com") &&
-        !location.hostname.endsWith(".tradeScout.com");
+      // STRICT DEV GATE: normalized hostname check with explicit allow/deny
+      const host = String(location.hostname || "").toLowerCase();
+      
+      const IS_LOCALHOST = host === "localhost" || host === "127.0.0.1";
+      
+      // Add every production domain you might ever serve from:
+      const IS_PROD_DOMAIN =
+        host === "thetradescout.com" ||
+        host.endsWith(".thetradescout.com") ||
+        host === "tradescout.com" ||
+        host.endsWith(".tradescout.com");
+      
+      const IS_DEV = IS_LOCALHOST && !IS_PROD_DOMAIN;
       
       if (IS_DEV) {
         setInterval(() => {
@@ -915,7 +923,7 @@
             `received=${state.receivedCount} | accepted=${state.acceptedCount} | ` +
             `watchMatched=${state.watchMatchedCount} | lastSignal=${age ? age + 's ago' : 'never'}`
           );
-        }, 10000);
+        }, 10_000);
       }
     }
 
