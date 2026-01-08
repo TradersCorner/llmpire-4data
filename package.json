@@ -31,7 +31,13 @@
     "gov:env:write": "node scripts/gov/print-gov-env.mjs --both --write-env",
     "gov:smoke:e2e": "node scripts/gov/smoke-gov-e2e.mjs",
     "gov:export": "node scripts/gov/export-ndjson.mjs",
-    "gov:prove": "node scripts/gov/prove-preflight.mjs && npm run gov:env:write && npm run gov:smoke:e2e -- --require-nonempty"
+      "gov:prove": "node scripts/gov/prove-preflight.mjs && npm run gov:env:write && npm run gov:smoke:e2e -- --require-nonempty",
+      "lens:core": "cd packages/lens-core && npm start",
+      "lens:core:dev": "cd packages/lens-core && npm run dev",
+      "lens:ext:build": "cd packages/lens-ext && npm run build",
+      "lens:ext:dev": "cd packages/lens-ext && npm run dev",
+      "lens:test": "cd packages/lens-shared && npm test && cd ../lens-core && npm test",
+      "dev:all": "npm start & npm run lens:core"
   },
   "dependencies": {
     "better-sqlite3": "^12.5.0",

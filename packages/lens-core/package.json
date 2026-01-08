@@ -1,0 +1,21 @@
+{
+  "name": "@lisa/lens-core",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Local daemon: proxy server + fact store + verifier for LISA Lens",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "test": "node --test"
+  },
+  "keywords": ["lisa", "lens", "proxy", "verification"],
+  "author": "TradeScout",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@lisa/lens-shared": "file:../lens-shared",
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {}
+}

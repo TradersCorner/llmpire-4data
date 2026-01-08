@@ -1,0 +1,16 @@
+{
+  "name": "@lisa/lens-shared",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Shared types, schemas, and matchers for LISA Lens",
+  "main": "index.js",
+  "scripts": {
+     "test": "node test.js",
+    "typecheck": "echo 'TypeScript checking placeholder'"
+  },
+  "keywords": ["lisa", "lens", "verification", "evidence"],
+  "author": "TradeScout",
+  "license": "UNLICENSED",
+  "dependencies": {},
+  "devDependencies": {}
+}

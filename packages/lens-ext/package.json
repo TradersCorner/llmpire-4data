@@ -1,0 +1,17 @@
+{
+  "name": "@lisa/lens-ext",
+  "version": "0.1.0",
+  "description": "Browser extension: UI injection + route-through controls for LISA Lens",
+  "scripts": {
+    "build": "echo 'Extension build placeholder'",
+    "dev": "echo 'Extension watch mode placeholder'",
+    "test": "echo 'Extension tests placeholder'"
+  },
+  "keywords": ["lisa", "lens", "browser-extension", "chrome", "verification"],
+  "author": "TradeScout",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@lisa/lens-shared": "file:../lens-shared"
+  },
+  "devDependencies": {}
+}
