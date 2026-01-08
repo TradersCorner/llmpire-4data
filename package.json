@@ -21,7 +21,7 @@
     "test": "node scripts/lisa-check.mjs test",
     "test:unit": "npm test",
     "test:integration": "node --test",
-    "test:watch": "node test-watch-scope-isolation.js && node test-watch-counters.js && node test-watch-memory-bounds.js",
+    "test:watch": "node test-watch-scope-isolation.js && node test-watch-counters.js && node test-watch-memory-bounds.js && node test-watch-inject-dev-only.js && node test-watch-status-output.js",
     "build": "node scripts/lisa-check.mjs build",
     "audit:lisa": "node scripts/lisa-audit.mjs",
     "preflight": "npm run check && npm run test && npm run test:watch && npm run audit:lisa",

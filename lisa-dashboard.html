@@ -454,6 +454,7 @@
       if (lower === "unwatch" || lower === "watch off" || lower === "stop") return { cmd: "unwatch", args: "" };
       if (lower === "watch" || lower === "watch status" || lower === "status") return { cmd: "watchstatus", args: "" };
       if (lower.startsWith("watch ")) return { cmd: "watch", args: t.slice(6).trim() };
+      if (lower.startsWith("inject ")) return { cmd: "inject", args: t.slice(7).trim() };
 
       return { cmd: null, args: "" };
     }
@@ -663,7 +664,8 @@
         lane.className = "lane";
         lane.textContent = (sig.lane || "").toString().toUpperCase();
         const ent = document.createElement("span");
-        ent.textContent = sig.entity || sig.asset || sig.symbol || "(entity)";
+        const testPrefix = sig.isTest ? "🧪 TEST: " : "";
+        ent.textContent = testPrefix + (sig.entity || sig.asset || sig.symbol || "(entity)");
         header.append(lane, ent);
 
         const mid = document.createElement("div");
@@ -795,7 +797,8 @@
       const delta = sig.delta ?? sig.magnitude ?? sig.value ?? "?";
       const dir = fmtDirection(sig.direction);
       const time = sig.timestamp ? new Date(sig.timestamp).toLocaleTimeString() : "now";
-      return `${lane.toUpperCase()} | ${entity} ${dir} ${delta} at ${time}`;
+      const testPrefix = sig.isTest ? "🧪 TEST: " : "";
+      return `${testPrefix}${lane.toUpperCase()} | ${entity} ${dir} ${delta} at ${time}`;
     }
 
     function startStream() {
@@ -970,8 +973,66 @@
       }
       
       if (parsed.cmd === "watchstatus") {
-        if (watchFilter.kind === "off") return "Not watching. Try: watch oil | watch lane:prices";
-        return `🔴 Watching: ${watchFilter.kind} "${watchFilter.value}" (${watchFilter.mode}).\nWatch matched: ${state.watchMatchedCount}`;
+        const connStatus = state.streamConnected ? "✅ Connected" : "❌ Disconnected";
+        const age = state.lastSignalAt ? Math.floor((Date.now() - new Date(state.lastSignalAt).getTime()) / 1000) : null;
+        const lastSig = age !== null ? `${age}s ago` : "never";
+        
+        const panelLanes = state.panelFilter.activeLanes.size > 0 ? Array.from(state.panelFilter.activeLanes).join(", ") : "all";
+        const panelTags = state.panelFilter.activeTags.size > 0 ? Array.from(state.panelFilter.activeTags).join(", ") : "all";
+        const panelAsset = state.panelFilter.assetFilter ? `asset: ${state.panelFilter.assetFilter}` : "asset: all";
+        
+        const watchStatus = watchFilter.kind !== "off" 
+          ? `🔴 ${watchFilter.kind} "${watchFilter.value}" (${watchFilter.mode})`
+          : "⏸️ off";
+        
+        return (
+          `Stream: ${connStatus} | Last signal: ${lastSig}\n` +
+          `Panel: lanes [${panelLanes}] | tags [${panelTags}] | ${panelAsset}\n` +
+          `Watch: ${watchStatus}\n` +
+          `Counters: received=${state.receivedCount} | accepted=${state.acceptedCount} | watchMatched=${state.watchMatchedCount}`
+        );
+      }
+      
+      // Inject test signal (dev-only)
+      if (parsed.cmd === "inject") {
+        if (!IS_DEV) return "⛔ inject command is dev-only (not available in production).";
+        if (!parsed.args) return "Usage: inject oil | inject lane:prices entity:crude_oil delta:+5";
+        
+        // Parse inject args into signal-like structure
+        const parts = parsed.args.split(/\s+/);
+        const testSignal = {
+          id: `test-${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          entity: "",
+          lane: "PRICES",
+          asset: "",
+          symbol: "",
+          delta: null,
+          direction: "→",
+          tags: [],
+          isTest: true // mark as test signal
+        };
+        
+        parts.forEach(part => {
+          const lower = part.toLowerCase();
+          if (lower.startsWith("lane:")) testSignal.lane = part.slice(5).toUpperCase();
+          else if (lower.startsWith("entity:")) testSignal.entity = part.slice(7);
+          else if (lower.startsWith("asset:")) testSignal.asset = part.slice(6);
+          else if (lower.startsWith("symbol:")) testSignal.symbol = part.slice(7);
+          else if (lower.startsWith("delta:")) {
+            const val = parseFloat(part.slice(6));
+            if (!isNaN(val)) {
+              testSignal.delta = val;
+              testSignal.direction = val > 0 ? "up" : val < 0 ? "down" : "→";
+            }
+          }
+          else if (!testSignal.entity) testSignal.entity = part; // default: first arg is entity
+        });
+        
+        // Inject into handleSignal pipeline
+        handleSignal(testSignal);
+        
+        return `🧪 TEST signal injected: ${testSignal.entity || testSignal.asset || "(no entity)"} [${testSignal.lane}]`;
       }
       
       const q = question.toLowerCase().trim();
@@ -1026,11 +1087,13 @@
       
       // Help
       if (q.includes("help") || q.includes("what can") || q === "?") {
-        return "Commands: watch oil | watch lane:prices | watch any:btc | unwatch | status | find oil | latest | top movers | count | bridge";
+        const devHelp = IS_DEV ? " | inject oil (dev)" : "";
+        return `Commands: watch oil | watch lane:prices | watch any:btc | unwatch | status | find oil | latest | top movers | count | bridge${devHelp}`;
       }
       
       // Default
-      return `Try: watch oil | watch lane:prices | unwatch | status | find oil | latest | help`;
+      const devCmd = IS_DEV ? " | inject oil" : "";
+      return `Try: watch oil | watch lane:prices | unwatch | status | find oil | latest | help${devCmd}`;
     }
 
     function sendChatMessage() {
