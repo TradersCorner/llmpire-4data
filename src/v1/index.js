@@ -1,4 +1,7 @@
 import http from "http";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import { intercept } from "./interceptor.js";
 import { addSubscriber } from "./stream.js";
 import { buildDecisionCard } from "../decision/DecisionCard.mjs";
@@ -32,6 +35,10 @@ const govQueuesAdapter = buildGovQueuesAdapter({
   decisionCardReader: readDecisionCards,
   feedbackContextReader: readFeedbackContexts,
 });
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../..");
 
 const server = http.createServer(async (req, res) => {
   // READ-ONLY STREAM (SSE)
@@ -347,6 +354,24 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       sendJson(400, { error: err.message || "bad_request" });
       return;
+    }
+  }
+
+  // Serve static files (lisa-dashboard.html)
+  if (req.method === "GET") {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+    const pathname = url.pathname;
+
+    if (pathname === "/lisa-dashboard.html" || pathname === "/") {
+      const filePath = path.join(projectRoot, "lisa-dashboard.html");
+      try {
+        const content = fs.readFileSync(filePath, "utf8");
+        res.writeHead(200, { "Content-Type": "text/html" });
+        res.end(content);
+        return;
+      } catch (err) {
+        // fall through to 404
+      }
     }
   }
 

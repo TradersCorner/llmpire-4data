@@ -85,3 +85,19 @@ jobs:
                   echo ""
                   echo "✅ All invariant tests passed"
                   echo "Constitutional compliance verified"
+
+            - name: Run watch regression tests
+              run: |
+                  set -euo pipefail
+
+                  echo "=== Running Stream Watch Regression Tests ==="
+                  echo ""
+
+                  npm run test:watch || {
+                    echo "❌ Watch regression tests failed"
+                    exit 1
+                  }
+
+                  echo ""
+                  echo "✅ Watch system regression guards passed"
+                  echo "Filter scope, counters, and memory bounds verified"

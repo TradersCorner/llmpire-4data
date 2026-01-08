@@ -175,6 +175,103 @@
     .health-metrics { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 4px 10px; font-size: 12px; }
     .health-metric-label { color: var(--muted); }
     .health-metric-value { font-weight: 600; }
+    
+    /* Chatbox */
+    .chatbox {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 380px;
+      max-height: 500px;
+      background: var(--panel);
+      border: 1px solid #1f2630;
+      border-radius: 12px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      z-index: 100;
+    }
+    .chatbox-header {
+      padding: 12px 16px;
+      background: var(--card);
+      border-bottom: 1px solid #1f2630;
+      border-radius: 12px 12px 0 0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .chatbox-toggle {
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      background: #1c2430;
+      border: 1px solid #2a323f;
+    }
+    .chatbox-toggle:hover { border-color: var(--accent); }
+    .chatbox-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 350px;
+    }
+    .chatbox-message {
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.4;
+    }
+    .chatbox-message.user {
+      background: #1f2c3a;
+      border: 1px solid var(--accent);
+      align-self: flex-end;
+      max-width: 85%;
+    }
+    .chatbox-message.assistant {
+      background: var(--card);
+      border: 1px solid #2a323f;
+      align-self: flex-start;
+      max-width: 85%;
+    }
+    .chatbox-input-area {
+      padding: 12px;
+      border-top: 1px solid #1f2630;
+      display: flex;
+      gap: 8px;
+    }
+    .chatbox-input {
+      flex: 1;
+      background: #1b2029;
+      border: 1px solid #2a323f;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .chatbox-input:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+    .chatbox-send {
+      background: var(--accent);
+      color: #0f1115;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s ease;
+    }
+    .chatbox-send:hover { opacity: 0.85; }
+    .chatbox-send:disabled { opacity: 0.5; cursor: not-allowed; }
+    .chatbox.minimized .chatbox-messages,
+    .chatbox.minimized .chatbox-input-area {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -195,7 +292,9 @@
 
   <div class="page">
     <section class="panel">
-      <div class="section-title">Accepted Signals</div>
+      <div class="section-title">Signals Passing Panel Filters</div>
+      <div id="filterStatus"></div>
+      <div id="streamHealth" style="display: flex; gap: 12px; padding: 8px 0; font-size: 12px; border-bottom: 1px solid #1f2630; margin-bottom: 8px;"></div>
       <div class="feed-list" id="feed"></div>
     </section>
 
@@ -208,6 +307,23 @@
       <div class="section-title">Untracked Movers (Recommendations)</div>
       <div class="rec-list" id="recs"></div>
     </section>
+  </div>
+
+  <div class="chatbox" id="chatbox">
+    <div class="chatbox-header">
+      <span>Ask LISA</span>
+      <span class="chatbox-toggle" id="chatboxToggle">−</span>
+    </div>
+    <div class="chatbox-messages" id="chatMessages"></div>
+    <div class="chatbox-input-area">
+      <input 
+        type="text" 
+        class="chatbox-input" 
+        id="chatInput" 
+        placeholder="Ask about signals, lanes, or data..."
+      />
+      <button class="chatbox-send" id="chatSend">Send</button>
+    </div>
   </div>
 
   <script>
@@ -230,10 +346,19 @@
     const state = {
       feed: [],
       recs: [],
-      activeTags: new Set(DEFAULT_TAGS),
-      activeLanes: new Set(DEFAULT_LANES),
-      assetFilter: "",
       bridgeHealth: null,
+      // Panel filters (control "Accepted Signals" rendering)
+      panelFilter: {
+        activeTags: new Set(DEFAULT_TAGS),
+        activeLanes: new Set(DEFAULT_LANES),
+        assetFilter: "",
+      },
+      // Stream health
+      streamConnected: false,
+      lastSignalAt: null,
+      receivedCount: 0,
+      acceptedCount: 0,
+      watchMatchedCount: 0,
     };
 
     const feedEl = document.getElementById("feed");
@@ -243,18 +368,150 @@
     const tagTogglesEl = document.getElementById("tagToggles");
     const clearFiltersBtn = document.getElementById("clearFiltersBtn");
     const assetFilterEl = document.getElementById("assetFilter");
+    const chatboxEl = document.getElementById("chatbox");
+    const chatMessagesEl = document.getElementById("chatMessages");
+    const chatInputEl = document.getElementById("chatInput");
+    const chatSendEl = document.getElementById("chatSend");
+    const chatboxToggleEl = document.getElementById("chatboxToggle");
+
+    const chatHistory = [];
+    let watchFilter = { kind: "off" };
+    const liveGate = { lastAtMs: 0, recentKeys: new Map() };
+
+    // Stream filtering utilities
+    function norm(s) {
+      return String(s ?? "")
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, " ");
+    }
+
+    function matchMode(haystack, needle, mode) {
+      if (!needle) return false;
+      if (mode === "exact") return haystack === needle;
+      if (mode === "startsWith") return haystack.startsWith(needle);
+      return haystack.includes(needle); // contains
+    }
+
+    function checkStreamMatch(signal, filter) {
+      if (!filter || filter.kind === "off") return false;
+
+      const needle = norm(filter.value);
+      const lane = norm(signal.lane);
+      const entity = norm(signal.entity);
+      const asset = norm(signal.asset);
+      const symbol = norm(signal.symbol);
+
+      switch (filter.kind) {
+        case "lane":
+          return matchMode(lane, needle, filter.mode);
+        case "entity":
+          return (
+            matchMode(entity, needle, filter.mode) ||
+            matchMode(asset, needle, filter.mode) ||
+            matchMode(symbol, needle, filter.mode)
+          );
+        case "any":
+          return (
+            matchMode(lane, needle, filter.mode) ||
+            matchMode(entity, needle, filter.mode) ||
+            matchMode(asset, needle, filter.mode) ||
+            matchMode(symbol, needle, filter.mode)
+          );
+        default:
+          return false;
+      }
+    }
+
+    function shouldEmitLiveChat(gate, signal, opts = {}) {
+      const minIntervalMs = opts.minIntervalMs ?? 400;       // max 2.5 msgs/sec
+      const dedupeWindowMs = opts.dedupeWindowMs ?? 10000;   // 10s dedupe
+
+      const now = Date.now();
+
+      // rate limit
+      if (now - gate.lastAtMs < minIntervalMs) return false;
+
+      // dedupe key
+      const key = `${signal.lane ?? ""}|${signal.entity ?? ""}|${signal.asset ?? ""}|${signal.symbol ?? ""}|${signal.delta ?? ""}`;
+
+      // purge old keys
+      for (const [k, t] of gate.recentKeys) {
+        if (now - t > dedupeWindowMs) gate.recentKeys.delete(k);
+      }
+
+      if (gate.recentKeys.has(key)) return false;
+
+      gate.recentKeys.set(key, now);
+      gate.lastAtMs = now;
+      return true;
+    }
+
+    function parseChatCommand(text) {
+      const t = text.trim();
+      const lower = t.toLowerCase();
+
+      if (lower === "unwatch" || lower === "watch off" || lower === "stop") return { cmd: "unwatch", args: "" };
+      if (lower === "watch" || lower === "watch status" || lower === "status") return { cmd: "watchstatus", args: "" };
+      if (lower.startsWith("watch ")) return { cmd: "watch", args: t.slice(6).trim() };
+
+      return { cmd: null, args: "" };
+    }
+
+    function buildFilterFromWatchArgs(args) {
+      const a = args.trim();
+      const lower = a.toLowerCase();
+
+      let mode = "contains";
+      let rest = a;
+
+      if (lower.startsWith("exact:")) { mode = "exact"; rest = a.slice(6).trim(); }
+      else if (lower.startsWith("starts:")) { mode = "startsWith"; rest = a.slice(7).trim(); }
+
+      const lrest = rest.toLowerCase();
+      if (lrest.startsWith("lane:")) return { kind: "lane", value: rest.slice(5).trim(), mode };
+      if (lrest.startsWith("any:")) return { kind: "any", value: rest.slice(4).trim(), mode };
+      if (lrest.startsWith("entity:")) return { kind: "entity", value: rest.slice(7).trim(), mode };
+
+      return { kind: "entity", value: rest, mode };
+    }
+
+    function passesPanelFilter(sig, pf) {
+      // Lane filter
+      if (sig.lane && !pf.activeLanes.has(sig.lane.toLowerCase())) return false;
+      
+      // Tag filter
+      const tags = Array.isArray(sig.tags) ? sig.tags : sig.tag ? [sig.tag] : [];
+      if (pf.activeTags.size > 0 && !tags.some(t => pf.activeTags.has(t))) return false;
+      
+      // Asset filter
+      if (pf.assetFilter) {
+        const needle = norm(pf.assetFilter);
+        const match = matchMode(norm(sig.entity), needle, "contains") ||
+                      matchMode(norm(sig.asset), needle, "contains") ||
+                      matchMode(norm(sig.symbol), needle, "contains");
+        if (!match) return false;
+      }
+      
+      return true;
+    }
+
+    function matchesWatchFilter(sig, wf) {
+      return checkStreamMatch(sig, wf);
+    }
 
     function renderLaneToggles() {
       laneTogglesEl.innerHTML = "";
       DEFAULT_LANES.forEach(lane => {
         const pill = document.createElement("label");
-        pill.className = `pill lane ${state.activeLanes.has(lane) ? "active" : ""}`;
+        pill.className = `pill lane ${state.panelFilter.activeLanes.has(lane) ? "active" : ""}`;
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.checked = state.activeLanes.has(lane);
+        cb.checked = state.panelFilter.activeLanes.has(lane);
         cb.onchange = () => {
-          if (cb.checked) state.activeLanes.add(lane); else state.activeLanes.delete(lane);
+          if (cb.checked) state.panelFilter.activeLanes.add(lane); else state.panelFilter.activeLanes.delete(lane);
           renderFeed();
+          renderFilterStatus();
         };
         const span = document.createElement("span");
         span.textContent = lane.toUpperCase();
@@ -267,44 +524,20 @@
       tagTogglesEl.innerHTML = "";
       DEFAULT_TAGS.forEach(tag => {
         const pill = document.createElement("label");
-        pill.className = `pill ${state.activeTags.has(tag) ? "active" : ""}`;
+        pill.className = `pill ${state.panelFilter.activeTags.has(tag) ? "active" : ""}`;
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.checked = state.activeTags.has(tag);
+        cb.checked = state.panelFilter.activeTags.has(tag);
         cb.onchange = () => {
-          if (cb.checked) state.activeTags.add(tag); else state.activeTags.delete(tag);
+          if (cb.checked) state.panelFilter.activeTags.add(tag); else state.panelFilter.activeTags.delete(tag);
           renderAll();
+          renderFilterStatus();
         };
         const span = document.createElement("span");
         span.textContent = tag;
         pill.append(cb, span);
         tagTogglesEl.appendChild(pill);
       });
-    }
-
-    function getSignalTags(sig) {
-      if (Array.isArray(sig.tags)) return sig.tags;
-      if (sig.tag) return [sig.tag];
-      return [];
-    }
-
-    function matchesTags(sig) {
-      const tags = getSignalTags(sig);
-      if (state.activeTags.size === 0) return true;
-      return tags.some(t => state.activeTags.has(t));
-    }
-
-    function matchesLane(sig) {
-      if (!sig.lane) return true;
-      return state.activeLanes.has(String(sig.lane).toLowerCase());
-    }
-
-    function matchesAsset(sig) {
-      if (!state.assetFilter) return true;
-      const needle = state.assetFilter.toLowerCase();
-      return [sig.entity, sig.asset, sig.symbol]
-        .filter(Boolean)
-        .some(v => String(v).toLowerCase().includes(needle));
     }
 
     function fmtDirection(dir) {
@@ -392,15 +625,31 @@
 
     function renderFeed() {
       feedEl.innerHTML = "";
-      const filtered = state.feed.filter(sig => matchesLane(sig) && matchesAsset(sig) && matchesTags(sig));
-      if (filtered.length === 0) {
+      const accepted = state.feed.filter(sig => passesPanelFilter(sig, state.panelFilter));
+      state.acceptedCount = accepted.length;
+      
+      if (accepted.length === 0) {
         const empty = document.createElement("div");
         empty.className = "empty";
-        empty.textContent = "No signals passing current filters.";
+        let emptyText = `No signals passing panel filters (${state.receivedCount} received).`;
+        
+        // Hint if received but none accepted
+        if (state.receivedCount > 0 && state.acceptedCount === 0) {
+          const hint = document.createElement("div");
+          hint.style.color = "var(--warn)";
+          hint.style.fontSize = "11px";
+          hint.style.marginTop = "4px";
+          hint.textContent = "💡 No signals match panel filters. Try enabling lanes or clearing tags/asset filter.";
+          empty.textContent = emptyText;
+          empty.appendChild(hint);
+        } else {
+          empty.textContent = emptyText;
+        }
+        
         feedEl.appendChild(empty);
         return;
       }
-      filtered.slice(-400).reverse().forEach(sig => {
+      accepted.slice(0, 400).forEach(sig => {
         const card = document.createElement("div");
         card.className = "card";
 
@@ -502,16 +751,20 @@
     }
 
     function clearFilters() {
-      state.activeTags.clear();
-      state.assetFilter = "";
+      state.panelFilter.activeTags.clear();
+      state.panelFilter.assetFilter = "";
       assetFilterEl.value = "";
       renderTagToggles();
-      renderAll();
-    }
+      renderAll();      renderFilterStatus();    }
 
     function handleSignal(sig) {
+      // Update stream health
+      state.lastSignalAt = Date.now();
+      state.receivedCount++;
+      
       if (sig.type === "tag_recommendation") {
         state.recs.push(sig);
+        state.recs = state.recs.slice(-200); // cap recs
         renderRecs();
         return;
       }
@@ -519,13 +772,30 @@
       if (sig.kind === "bridge_health" || sig.signal === "bridge.health") {
         state.bridgeHealth = sig;
         renderBridgeHealth();
-        // Also surface in the generic feed so lane filters can reveal ops signals
-        state.feed.push(sig);
-        renderFeed();
-        return;
       }
-      state.feed.push(sig);
+      
+      // Always add to feed (bounded)
+      state.feed = [sig, ...state.feed].slice(0, 500);
       renderFeed();
+      
+      // LIVE chat: watch filter matched AND passes panel filter (keeps coherence)
+      const watchMatched = matchesWatchFilter(sig, watchFilter);
+      const panelPassed = passesPanelFilter(sig, state.panelFilter);
+      
+      if (watchMatched && panelPassed && shouldEmitLiveChat(liveGate, sig)) {
+        state.watchMatchedCount++;
+        const summary = formatSignalForChat(sig);
+        addChatMessage("assistant", `🔴 LIVE: ${summary}`);
+      }
+    }
+    
+    function formatSignalForChat(sig) {
+      const entity = sig.entity || sig.asset || sig.symbol || "unknown";
+      const lane = sig.lane || "?";
+      const delta = sig.delta ?? sig.magnitude ?? sig.value ?? "?";
+      const dir = fmtDirection(sig.direction);
+      const time = sig.timestamp ? new Date(sig.timestamp).toLocaleTimeString() : "now";
+      return `${lane.toUpperCase()} | ${entity} ${dir} ${delta} at ${time}`;
     }
 
     function startStream() {
@@ -547,6 +817,8 @@
       // v1 stream uses named SSE events (hello/state_update/state_expired)
       es.addEventListener("hello", evt => {
         console.log("SSE HELLO:", evt.data);
+        state.streamConnected = true;
+        renderStreamHealth();
       });
 
       es.addEventListener("state_update", evt => {
@@ -557,26 +829,221 @@
         console.log("SSE STATE_EXPIRED:", evt.data);
       });
 
+      es.addEventListener("open", () => {
+        state.streamConnected = true;
+        renderStreamHealth();
+      });
+
       // Fallback for any unnamed/default events
       es.onmessage = evt => {
         handleDataPayload(evt.data);
       };
       es.onerror = err => {
         console.error("SSE error", err);
+        state.streamConnected = false;
+        renderStreamHealth();
       };
+    }
+
+    function renderStreamHealth() {
+      const healthEl = document.getElementById("streamHealth");
+      if (!healthEl) return;
+      
+      const status = state.streamConnected ? "Connected" : "Disconnected";
+      const statusClass = state.streamConnected ? "health-status green" : "health-status red";
+      const lastSignal = state.lastSignalAt ? new Date(state.lastSignalAt).toLocaleTimeString() : "never";
+      
+      healthEl.innerHTML = `
+        <span class="${statusClass}">${status}</span>
+        <span class="meta">Last: ${lastSignal}</span>
+        <span class="meta">Received: ${state.receivedCount} | Accepted: ${state.acceptedCount} | Watch matched: ${state.watchMatchedCount}</span>
+      `;
+    }
+    
+    function renderFilterStatus() {
+      const statusEl = document.getElementById("filterStatus");
+      if (!statusEl) return;
+      
+      // Panel filter status
+      const panelLanes = Array.from(state.panelFilter.activeLanes).join("+") || "none";
+      const panelTags = Array.from(state.panelFilter.activeTags).slice(0, 2).join(", ") || "none";
+      const panelTagsSuffix = state.panelFilter.activeTags.size > 2 ? ` +${state.panelFilter.activeTags.size - 2} more` : "";
+      const panelAsset = state.panelFilter.assetFilter || "none";
+      
+      // Watch filter status
+      let watchStatus = "off";
+      if (watchFilter.kind && watchFilter.kind !== "off") {
+        const mode = watchFilter.mode || "contains";
+        watchStatus = `${watchFilter.kind} ${mode} "${watchFilter.value}"`;
+      }
+      
+      statusEl.innerHTML = `
+        <div style="font-size: 11px; color: var(--muted); padding: 6px 0; border-bottom: 1px solid #1f2630;">
+          <div style="margin-bottom: 3px;"><strong>Panel:</strong> ${panelLanes} | tags: ${panelTags}${panelTagsSuffix} | asset: ${panelAsset}</div>
+          <div><strong>Watch:</strong> ${watchStatus}</div>
+        </div>
+      `;
     }
 
     function init() {
       renderLaneToggles();
       renderTagToggles();
       renderAll();
+      renderStreamHealth();
+      renderFilterStatus();
       assetFilterEl.addEventListener("input", e => {
-        state.assetFilter = e.target.value.trim();
+        state.panelFilter.assetFilter = e.target.value.trim();
         renderFeed();
+        renderFilterStatus();
       });
       clearFiltersBtn.addEventListener("click", clearFilters);
       startStream();
+      setInterval(renderStreamHealth, 1000); // update every second
+      
+      // Runtime self-check (dev mode only): log diagnostics every 10s
+      // STRICT DEV GATE: localhost AND not production domain
+      const IS_DEV =
+        (location.hostname === "localhost" || location.hostname === "127.0.0.1") &&
+        !location.hostname.endsWith(".thetradescout.com") &&
+        !location.hostname.endsWith(".tradeScout.com");
+      
+      if (IS_DEV) {
+        setInterval(() => {
+          const age = state.lastSignalAt ? Math.floor((Date.now() - new Date(state.lastSignalAt).getTime()) / 1000) : null;
+          console.log(
+            `[WATCH SELF-CHECK] connected=${state.streamConnected} | ` +
+            `received=${state.receivedCount} | accepted=${state.acceptedCount} | ` +
+            `watchMatched=${state.watchMatchedCount} | lastSignal=${age ? age + 's ago' : 'never'}`
+          );
+        }, 10000);
+      }
     }
+
+    // Chatbox functions
+    function toggleChatbox() {
+      chatboxEl.classList.toggle("minimized");
+      chatboxToggleEl.textContent = chatboxEl.classList.contains("minimized") ? "+" : "−";
+    }
+
+    function addChatMessage(role, content) {
+      chatHistory.push({ role, content, ts: Date.now() });
+      const msgEl = document.createElement("div");
+      msgEl.className = `chatbox-message ${role}`;
+      msgEl.textContent = content; // safe: plain text only
+      chatMessagesEl.appendChild(msgEl);
+      
+      // Cap chat history DOM and memory
+      while (chatMessagesEl.children.length > 200) {
+        chatMessagesEl.removeChild(chatMessagesEl.firstChild);
+      }
+      if (chatHistory.length > 200) {
+        chatHistory.splice(0, chatHistory.length - 200);
+      }
+      
+      chatMessagesEl.scrollTop = chatMessagesEl.scrollHeight;
+    }
+
+    function answerQuestion(question) {
+      const parsed = parseChatCommand(question);
+      
+      // Handle watch commands
+      if (parsed.cmd === "watch") {
+        if (!parsed.args) return "Usage: watch oil | watch lane:prices | watch any:btc | watch exact:cl\nNote: Watch filter respects panel filters (lanes/tags/asset).";
+        watchFilter = buildFilterFromWatchArgs(parsed.args);
+        state.watchMatchedCount = 0; // reset counter
+        renderFilterStatus();
+        return `🔴 Watching: ${watchFilter.kind} "${watchFilter.value}" (${watchFilter.mode}).\nLIVE updates respect panel filters.`;
+      }
+      
+      if (parsed.cmd === "unwatch") {
+        watchFilter = { kind: "off" };
+        renderFilterStatus();
+        return `⏸️ Stopped watching. Stream continues in background.`;
+      }
+      
+      if (parsed.cmd === "watchstatus") {
+        if (watchFilter.kind === "off") return "Not watching. Try: watch oil | watch lane:prices";
+        return `🔴 Watching: ${watchFilter.kind} "${watchFilter.value}" (${watchFilter.mode}).\nWatch matched: ${state.watchMatchedCount}`;
+      }
+      
+      const q = question.toLowerCase().trim();
+      
+      // Search historical data
+      if (q.includes("find") || q.includes("search") || q.includes("show")) {
+        const words = q.split(/\s+/);
+        const searchTerm = words[words.length - 1].replace(/[.,!?]/g, '');
+        const needle = norm(searchTerm);
+        const matches = state.feed.filter(s => 
+          matchMode(norm(s.entity), needle, "contains") ||
+          matchMode(norm(s.asset), needle, "contains") ||
+          matchMode(norm(s.symbol), needle, "contains")
+        );
+        if (matches.length === 0) return `No historical signals for "${searchTerm}". Try: watch ${searchTerm}`;
+        const latest = matches[0]; // feed is reverse-chronological now
+        return `Found ${matches.length} past signals for "${searchTerm}". Latest: ${formatSignalForChat(latest)}`;
+      }
+      
+      // Data summary
+      if (q.includes("how many") || q.includes("count") || q.includes("total")) {
+        const watching = watchFilter.kind !== "off" ? `🔴 Watching: ${watchFilter.kind}` : "Not watching";
+        return `Received: ${state.receivedCount} | Accepted: ${state.acceptedCount} | Recs: ${state.recs.length}\n${watching} (matched: ${state.watchMatchedCount})`;
+      }
+      
+      // Bridge health snapshot
+      if (q.includes("bridge") || q.includes("health") || q.includes("ops")) {
+        if (!state.bridgeHealth?.metrics) {
+          return "No bridge health data yet.";
+        }
+        const m = state.bridgeHealth.metrics;
+        const status = computeBridgeHealthStatus(m);
+        return `Bridge: ${status.toUpperCase()}. Fwd: ${m.forwarded || 0}, Drop: ${m.dropped || 0}, Retry: ${m.retries || 0}, Fail: ${m.failures || 0}.`;
+      }
+      
+      // Latest signal
+      if (q.includes("latest") || q.includes("recent") || q.includes("last")) {
+        if (state.feed.length === 0) return "No signals yet.";
+        const latest = state.feed[0]; // feed is now newest-first
+        return `Latest: ${formatSignalForChat(latest)}`;
+      }
+      
+      // Top movers
+      if (q.includes("top") || q.includes("biggest") || q.includes("largest")) {
+        const sorted = [...state.feed]
+          .filter(s => s.delta != null)
+          .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+          .slice(0, 3);
+        if (sorted.length === 0) return "No delta data available.";
+        return `Top movers: ${sorted.map(s => `${s.entity || s.asset || "?"} (${s.delta > 0 ? "+" : ""}${s.delta})`).join(", ")}`;
+      }
+      
+      // Help
+      if (q.includes("help") || q.includes("what can") || q === "?") {
+        return "Commands: watch oil | watch lane:prices | watch any:btc | unwatch | status | find oil | latest | top movers | count | bridge";
+      }
+      
+      // Default
+      return `Try: watch oil | watch lane:prices | unwatch | status | find oil | latest | help`;
+    }
+
+    function sendChatMessage() {
+      const message = chatInputEl.value.trim();
+      if (!message) return;
+      
+      addChatMessage("user", message);
+      chatInputEl.value = "";
+      
+      // Simulate assistant response
+      setTimeout(() => {
+        const response = answerQuestion(message);
+        addChatMessage("assistant", response);
+      }, 300);
+    }
+
+    chatboxToggleEl.addEventListener("click", toggleChatbox);
+    chatSendEl.addEventListener("click", sendChatMessage);
+    chatInputEl.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") sendChatMessage();
+    });
 
     init();
   </script>
