@@ -22,6 +22,7 @@ overlay.css         - Verification overlay styles
 
 1. Build extension: `npm run build`
 2. Load unpacked in Chrome: `chrome://extensions` → Load unpacked → select `packages/lens-ext`
+3. First use: click a button, enter your `LENS_TOKEN` from lens-core `.env` (stored locally via chrome.storage)
 
 ## Development
 

@@ -37,7 +37,8 @@
       "lens:ext:build": "cd packages/lens-ext && npm run build",
       "lens:ext:dev": "cd packages/lens-ext && npm run dev",
       "lens:test": "cd packages/lens-shared && npm test && cd ../lens-core && npm test",
-      "dev:all": "npm start & npm run lens:core"
+        "dev:all": "npm start & npm run lens:core",
+        "ci:lens": "node scripts/ci/lens-ci.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.5.0",

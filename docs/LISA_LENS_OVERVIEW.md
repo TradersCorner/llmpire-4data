@@ -1,5 +1,10 @@
 # LISA Lens Overview
 
+## Related doctrine
+
+OR / LISA mission and selective inheritance (canon pointer):
+`OR_LISA_DOCTRINE_POINTER.md`
+
 ## What LISA Lens Is
 
 LISA Lens is a **local-first verification layer** that routes AI interactions through your local LISA instance for evidence-backed validation before sending queries to upstream providers (OpenAI, Anthropic, etc.).
@@ -13,8 +18,11 @@ It consists of three packages:
 
 ❌ **No stealth interception**: Users must explicitly opt-in via "Send through LISA" button  
 ❌ **No automatic rewriting**: Lens assists or blocks, it doesn't silently modify queries  
-❌ **No data exfiltration**: All processing happens locally, evidence stays on your machine  
-❌ **No vendor lock-in**: Works with any AI provider via standard proxy pattern
+❌ **No hidden transmission**: The user explicitly triggers the request; the selected prompt and evidence pack are then sent to the configured upstream provider
+
+❌ **No token forwarding**: The local Lens token authenticates the daemon and is not included in the upstream request
+
+❌ **No single-provider lock-in**: The current adapters support OpenAI and Anthropic; additional providers require an adapter
 
 ## Architecture
 
@@ -22,7 +30,7 @@ It consists of three packages:
 [Browser Extension]
        ↓ (intercept on button click)
 [lens-core local daemon :3001]
-       ↓ (verify + enrich)
+       ↓ (select evidence + send prompt/evidence)
 [Upstream AI Provider]
        ↓ (response)
 [lens-core] → add evidence overlay
@@ -37,7 +45,6 @@ It consists of three packages:
 - Exposes endpoints:
   - `/lens/answer` - Verified question answering
   - `/lens/stream` - SSE stream with evidence tags
-  - `/v1/*` - Proxies to existing 4data v1 API (compatibility layer)
 
 ### Extension Mode (lens-ext)
 - Injects "Send through LISA" button on ChatGPT/Claude/other AI UIs
@@ -64,7 +71,7 @@ lens-core subscribes to the existing 4data v1 SSE stream (`http://localhost:3000
 
 1. Receives signals (PRICES, CAPACITY, INVENTORY, etc.)
 2. Applies watch filters (same logic as dashboard)
-3. Builds local fact store (recent 500 signals)
+3. Builds a bounded local in-memory fact store (up to 2,000 signals)
 4. Generates evidence packs on query
 
 **No changes to v1 stream required** - Lens is a read-only consumer.
@@ -100,7 +107,6 @@ export { VerificationTag, tagClaim }
 - Upstream adapters (OpenAI, Anthropic proxies)
 - `/lens/answer` endpoint
 - `/lens/stream` endpoint (filtered SSE)
-- `/v1/*` proxy (backwards compatibility)
 
 **Does NOT own:**
 - Original v1 stream generation
@@ -170,55 +176,39 @@ npm run dev:all        # starts v1 + lens-core in parallel
 
 ## Migration Path
 
-### Phase 1: Structure only (current)
+### Phase 1: Structure
 - Create packages/ directory
 - Move shared types to lens-shared
 - No behavior changes
 
-### Phase 2: Extract lens-core
+### Phase 2: Extract lens-core (present in this recovery slice)
 - Create local daemon server
 - Implement /lens/answer endpoint
 - Keep v1 stream unchanged
 
-### Phase 3: Build lens-ext
+### Phase 3: Build lens-ext (present in this recovery slice)
 - Create browser extension scaffold
 - Implement UI injection
 - Wire to lens-core
 
-### Phase 4: Integration testing
+### Phase 4: Integration testing (automated local checks present; Chrome runbook unexecuted)
 - Run v1 + lens-core together
 - Verify stream consumption
 - Test evidence pack generation
 
 ## Configuration
 
-### lens-core config (packages/lens-core/config.json)
-```json
-{
-  "port": 3001,
-  "upstreamStreamUrl": "http://localhost:3000/stream",
-  "factStoreCapacity": 500,
-  "defaultMode": "assist",
-  "providers": {
-    "openai": { "enabled": true },
-    "anthropic": { "enabled": true }
-  }
-}
-```
+### lens-core configuration
 
-### lens-ext config (packages/lens-ext/manifest.json)
-```json
-{
-  "name": "LISA Lens",
-  "version": "0.1.0",
-  "permissions": ["storage", "activeTab"],
-  "host_permissions": ["http://localhost:3001/*"],
-  "content_scripts": [{
-    "matches": ["https://chat.openai.com/*", "https://claude.ai/*"],
-    "js": ["inject.js"]
-  }]
-}
-```
+Configuration is environment-based; there is no `config.json`. See
+`packages/lens-core/.env.example`. `LENS_TOKEN` is required,
+`LENS_ALLOW_QUERY_TOKEN` defaults to `false`, and upstream calls require the
+selected provider's API key.
+
+### lens-ext configuration
+
+The checked-in `packages/lens-ext/manifest.json` is the authority for current
+permissions, localhost host access, and supported content-script sites.
 
 ## Future Extensions (out of scope for v1)
 
