@@ -1,11 +1,12 @@
 {
   "name": "@lisa/lens-ext",
   "version": "0.1.0",
+  "type": "module",
   "description": "Browser extension: UI injection + route-through controls for LISA Lens",
   "scripts": {
     "build": "echo 'Extension build placeholder'",
     "dev": "echo 'Extension watch mode placeholder'",
-    "test": "echo 'Extension tests placeholder'"
+    "test": "node --test test/*.test.js"
   },
   "keywords": ["lisa", "lens", "browser-extension", "chrome", "verification"],
   "author": "TradeScout",

@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "LISA Lens",
+  "description": "Route AI UI prompts through LISA Lens and verify answers with evidence.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": ["http://localhost:3001/*", "http://127.0.0.1:3001/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*",
+        "https://claude.ai/*",
+        "https://gemini.google.com/*",
+        "https://perplexity.ai/*",
+        "https://www.perplexity.ai/*"
+      ],
+      "js": ["inject.js"],
+      "css": ["overlay.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_title": "LISA Lens"
+  }
+}
